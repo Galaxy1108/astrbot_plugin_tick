@@ -887,7 +887,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     lv = int(qs.get("lv", ["0"])[0])
                 except ValueError:
                     return self._send("参数错误", "text/plain")
-                if stage not in (1, 2, 3, 4, 5, 6, 7, 8) or lv not in (-1, 0, 1, 2):
+                if stage not in (1, 2, 3, 4, 5, 6, 7) or lv not in (-1, 0, 1, 2):
                     return self._send("参数错误", "text/plain")
                 wait = HINT_UNLOCK.get(lv)
                 if wait is not None:
@@ -937,7 +937,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             stage = int(qs.get("stage", ["0"])[0])
         except ValueError:
             return self._send("参数错误", "text/plain")
-        if stage not in (1, 2, 3, 4, 5, 6, 7, 8):
+        if stage not in (1, 2, 3, 4, 5, 6, 7):
             return self._send("没有这一关。", "text/plain")
         with LOCK:
             p = STATE["players"].get(player)
@@ -966,7 +966,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._send("参数错误", "text/plain")
         player = self._player_from(qs) or self._cookie_player()
-        if stage not in (1, 2, 3, 4, 5, 6, 7, 8):
+        if stage not in (1, 2, 3, 4, 5, 6, 7):
             return self._send("没有这一关。", "text/plain")
         with LOCK:
             p = STATE["players"].get(player)
@@ -1152,7 +1152,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     stage, lv = 0, 0
                 p = STATE["players"].get(target)
                 wait = HINT_UNLOCK.get(lv)
-                if p and stage in (1, 2, 3, 4, 5, 6, 7, 8) and wait is not None:
+                if p and stage in (1, 2, 3, 4, 5, 6, 7) and wait is not None:
                     p.setdefault("hint_gen", {})[str(stage)] = int(time.time()) - wait
                     save_state()
                     flash = f"已为 {target} 跳过第 {stage} 关{HINT_LABELS[lv]}冷却。"
@@ -1176,7 +1176,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except ValueError:
                     stage = 0
                 p = STATE["players"].get(target)
-                if p and stage in (1, 2, 3, 4, 5, 6, 7, 8):
+                if p and stage in (1, 2, 3, 4, 5, 6, 7):
                     if qs.get("approve"):
                         issue_code(p, "h", stage, 2)
                         p.setdefault("hint_req", {})[str(stage)] = {
@@ -1214,7 +1214,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     )
                     frags = " ".join(vp["frags"])
                     unlock_rows = []
-                    for st in range(1, 9):
+                    for st in range(1, 8):  # 第8关提示已弃用
                         first = (vp.get("hint_gen") or {}).get(str(st), 0)
                         for lv in range(3):
                             wait = HINT_UNLOCK.get(lv)
@@ -1277,6 +1277,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             pending = []
             for player, p in STATE["players"].items():
                 for st, r in (p.get("hint_req") or {}).items():
+                    if int(st) == 8:
+                        continue  # 第8关提示已弃用
                     if r.get("status") == "pending":
                         pending.append((player, p, int(st), r))
         pending_html = ""
