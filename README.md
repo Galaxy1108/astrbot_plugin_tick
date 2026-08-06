@@ -19,6 +19,23 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 | `server/make_assets.py` | PNG tEXt 隐写注入脚本 |
 | `server/static/tick.png` | 已注入碎片 `85ac` 的对钩函数图 |
 
+## 玩家系统（防剧透）
+
+所有提示和部分碎片**只在私聊发放，且按进度解锁**：
+
+1. 玩家访问网页 `/join` 领取绑定码（写 cookie）；
+2. 玩家在群里 @汐月 发送 `/bind <绑定码>`，绑定 QQ 身份（后台可看到 QQ）；
+3. 玩家私聊汐月使用指令：
+   - `/tick` — 玩法说明
+   - `/hint N` — 第 N 关提示（必须先通关第 N-1 关）
+   - `/记忆库` — 第 5 关碎片（必须先完成前 4 关）
+   - `/凭证` — 第 7 关碎片（必须先完成前 6 关）
+   - `/进度` — 查看自己的通关进度
+4. 群内只保留剧情对话（苏桁/对钩/网站），不含任何答案。
+
+**后台面板**：`/admin?pass=<管理口令>`，可查看每个玩家：绑定码、QQ、昵称、各关 ✓、终局、最后活跃。
+管理口令默认 `tick-admin-9c4f2b7a1d`（务必改掉，见下）。
+
 ## 关卡一览（答案 = 碎片）
 
 | 关 | 答案 | 玩法 | 载体 |
@@ -27,9 +44,9 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 | 2 | `cac2` | `robots.txt` → `/secret` → base64 `Y2FjMg==` | `/robots.txt` `/secret` |
 | 3 | `f48b` | 求和 1..353 再加 122，转十六进制 | `/stage3` |
 | 4 | `7ada` | 下载 PNG，文本/十六进制编辑器搜 `7ada`（tEXt 块） | `/static/tick.png` |
-| 5 | `4f1e` | 群里问汐月「记忆库密码」 | 汐月 |
+| 5 | `4f1e` | 私聊汐月 `/记忆库`（需完成前 4 关） | 汐月 |
 | 6 | `6f0e` | 凯撒前移 2：`6h0g` | `/stage6` |
-| 7 | `0888` | 把凭证口令发给汐月 | 汐月 |
+| 7 | `0888` | 私聊汐月 `/凭证`（需完成前 6 关） | 汐月 |
 | 8 | `83d2` | 每页右下角小签名 | 所有页面 |
 
 **访问码**：`66b2cac2f48b7ada4f1e6f0e088883d2` → 访问 `/final?key=<访问码>` 得到 flag。
@@ -46,14 +63,7 @@ https://github.com/Galaxy1108/astrbot_plugin_tick
 
 或直接把 `astrbot_plugin_tick/` 整个目录复制到 AstrBot 数据目录 `data/plugins/` 下，然后在管理面板重载插件。
 
-触发词（完整匹配，多字少字都不触发）：
-
-| 说 | 汐月回 |
-|----|--------|
-| 汐月，苏桁的记忆库密码是什么？ | ……4f1e |
-| 请出示你的访问凭证，我是苏桁的合作者。 | 碎片七：0888 |
-| 提到「苏桁」/「对钩」 | 剧情背景 + 网站线索 |
-| 提到「网站」/「网址」/「入口」 | 指向 tick |
+安装后打开插件配置，把 `admin_token` 改成和网页服务器一致的**管理口令**（重要）。
 
 ## 服务器部署（tick.py）
 
@@ -65,6 +75,12 @@ Start-Process -FilePath "C:\Users\Administrator\AppData\Roaming\uv\python\cpytho
 
 或使用 pm2：`pm2 start tick.py --interpreter python -- 8080`。
 
+**管理口令**：默认 `tick-admin-9c4f2b7a1d`，务必改成自己的：
+```powershell
+$env:TICK_ADMIN_TOKEN="你的新口令"; pm2 restart tick-arg --update-env
+```
+后台面板：`http://<公网IP>:8080/admin?pass=<口令>`
+
 **防火墙**：
 - Windows 防火墙：`netsh advfirewall firewall add rule name="tick-arg" dir=in action=allow protocol=TCP localport=8080`
 - **阿里云安全组：入方向开放 TCP 8080**（这是第二层防火墙，必须在 ECS 控制台操作）
@@ -74,12 +90,19 @@ Start-Process -FilePath "C:\Users\Administrator\AppData\Roaming\uv\python\cpytho
 ## 验证
 
 ```bash
-# 每关答案
+# 1. 领取绑定码（写入 cookie）
+curl -c cj.txt "http://localhost:8080/join?code=test01"
+# 2. 插件 API（模拟汐月请求）
+curl "http://localhost:8080/api/bind?player=test01&qq=12345&name=Alice&secret=tick-admin-9c4f2b7a1d"
+curl "http://localhost:8080/api/progress?player=test01&secret=tick-admin-9c4f2b7a1d"
+# 3. 每关答案（带 cookie）
 for a in 66b2 cac2 f48b 7ada 4f1e 6f0e 0888 83d2; do
-  curl -s "http://localhost:8080/check?stage=N&ans=$a"
+  curl -b cj.txt "http://localhost:8080/check?stage=N&ans=$a"
 done
-# 终局
-curl "http://localhost:8080/final?key=66b2cac2f48b7ada4f1e6f0e088883d2"
+# 4. 终局
+curl -b cj.txt "http://localhost:8080/final?key=66b2cac2f48b7ada4f1e6f0e088883d2"
+# 5. 后台面板
+curl "http://localhost:8080/admin?pass=tick-admin-9c4f2b7a1d"
 ```
 
 ## 再生成素材

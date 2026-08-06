@@ -1,5 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "properties": {}
+  "properties": {
+    "web_base": {
+      "type": "string",
+      "default": "http://127.0.0.1:8080",
+      "description": "对钩计划网页服务器地址（插件与网页同机时保持默认）"
+    },
+    "admin_token": {
+      "type": "string",
+      "default": "tick-admin-9c4f2b7a1d",
+      "description": "与网页服务器相同的管理口令（tick.py 的 TICK_ADMIN_TOKEN），请改成你自己的"
+    }
+  }
 }
