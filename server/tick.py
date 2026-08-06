@@ -898,7 +898,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             "ts": int(time.time()), "status": "approved", "approved_ts": int(time.time())}
                         flash = f"<div class='box'><p class='ok'>已批准 {target} 的第 {stage} 关第三层提示。</p></div>"
                     else:
-                        p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "rejected"}
+                        p.setdefault("hint_req", {})[str(stage)] = {
+                            "ts": int(time.time()), "status": "rejected", "rejected_ts": int(time.time())}
                         flash = f"<div class='box'><p class='err'>已驳回 {target} 的第 {stage} 关申请。</p></div>"
                     save_state()
         decode_html = ""
@@ -1228,6 +1229,9 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                     if r.get("status") == "approved" and r.get("approved_ts", 0) > after:
                         events.append({"type": "hint_approved", "player": player, "qq": qq, "name": name,
                                        "stage": int(st), "ts": r["approved_ts"]})
+                    if r.get("status") == "rejected" and r.get("rejected_ts", 0) > after:
+                        events.append({"type": "hint_rejected", "player": player, "qq": qq, "name": name,
+                                       "stage": int(st), "ts": r["rejected_ts"]})
         events.sort(key=lambda e: e["ts"])
         return self._json({"ok": True, "events": events})
 

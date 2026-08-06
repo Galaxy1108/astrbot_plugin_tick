@@ -369,6 +369,16 @@ class Main(Star):
                 except Exception as ex:
                     logger.error(f"[tick] 审批通知发送失败: {ex}")
                 continue
+            elif etype == "hint_rejected":
+                pumo = await self.get_kv_data(f"tick_umo_{e['player']}", None)
+                if not pumo:
+                    continue
+                text = f"玩家{name}，您第 {e['stage']} 关的第三层提示申请被驳回了。可以回网页重新申请。"
+                try:
+                    await self.context.send_message(pumo, MessageChain(chain=[Plain(text)]))
+                except Exception as ex:
+                    logger.error(f"[tick] 驳回通知发送失败: {ex}")
+                continue
             else:
                 continue
             try:
