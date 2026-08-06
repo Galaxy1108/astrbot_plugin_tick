@@ -965,8 +965,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(
                 page("玩家中心", f"<div class='box'><p class='ok'>✅ 验证通过，登录已更新。</p><p>你的进度已恢复，继续挑战吧。</p></div><a href='/stage1' style='font-size:13px'>← 返回第 1 关</a>").encode(),
                 extra_headers=[
-                    f"Set-Cookie: {COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}",
-                    f"Set-Cookie: {COOKIE_OLD}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+                    ("Set-Cookie", f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"),
+                    ("Set-Cookie", f"{COOKIE_OLD}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT"),
                 ],
             )
         with LOCK:
