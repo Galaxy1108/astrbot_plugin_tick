@@ -121,6 +121,47 @@ HINT_TEXTS = {
 
 HINT_LABELS = ["第一层", "第二层", "第三层"]
 
+# 提示码生成前的「解密卡」：解出短语才能解锁生成按钮。
+# 第一层=ROT13、第二层=Base64、第三层=XOR（密钥 zeta 藏在 ζ 草图 tEXt 块）。
+# 只存 MD5，源码里看不到明文答案。
+UNLOCK_MD5 = {
+    "1-0": "1bda80f2be4d3658e0baa43fbe7ae8c1",
+    "1-1": "36cd38f49b9afa08222c0dc9ebfe35eb",
+    "1-2": "06d4cd63bde972fc66a0aed41d2f5c51",
+    "2-0": "87b7cb79481f317bde90c116cf36084b",
+    "2-1": "5ebe2294ecd0e0f08eab7690d2a6ee69",
+    "2-2": "95a1446a7120e4af5c0c8878abb7e6d2",
+    "3-0": "6aa9260025c1f596abb0431f006fbf9b",
+    "3-1": "7aaf6c53e9feb6c123b1db536cf7c544",
+    "3-2": "79af838b249dceaad746c42464fcb0f1",
+    "4-0": "ab4086ecd47c568d5ba5739d4078988f",
+    "4-1": "1cb251ec0d568de6a929b520c4aed8d1",
+    "4-2": "8cd9037046abc69d517ceb9eca7a8eba",
+    "5-0": "cd69b4957f06cd818d7bf3d61980e291",
+    "5-1": "184aa077df08b90ac9fe282cceaa325e",
+    "5-2": "dce7c4174ce9323904a934a486c41288",
+    "6-0": "72ab8af56bddab33b269c5964b26620a",
+    "6-1": "49a1b76eb0b47571f00995850a8657b4",
+    "6-2": "c785e1ed2950e3e36b1e2ca01f299a54",
+    "7-0": "1a1dc91c907325c69271ddf0c944bc72",
+    "7-1": "94a08da1fecbb6e8b46990538c7b50b2",
+    "7-2": "ac05c7d8f4406c971085f947e43ef730",
+    "8-0": "04b29480233f4def5c875875b6bdc3b1",
+    "8-1": "251d164643533a527361dbe1a7b9235d",
+    "8-2": "6e27392494718b706aead66b6053c821",
+}
+UNLOCK_CIPHER = {
+    "1-0": "ivrj", "1-1": "c291cmNl", "1-2": "190a190c1f0b00",
+    "2-0": "ebobg", "2-1": "c2VjcmV0", "2-2": "180407044c51",
+    "3-0": "ncrel", "3-1": "YmFzZWw=", "3-2": "080c110c1b0b1a",
+    "4-0": "cvkry", "4-1": "dGV4dA==", "4-2": "0911110615",
+    "5-0": "zrzbel", "5-1": "dmF1bHQ=", "5-2": "160a170a",
+    "6-0": "cv", "6-1": "ZmV5bm1hbg==", "6-2": "140c1a04",
+    "7-0": "cnff", "7-1": "dG9rZW4=", "7-2": "0e1701120e",
+    "8-0": "fvta", "8-1": "Zm9vdGVy", "8-2": "190a060f1f17",
+}
+UNLOCK_METHOD = {0: "ROT13（每个字母移动 13 位）", 1: "Base64 解码", 2: "XOR（密钥藏在 ζ 草图的 tEXt 块里，字节逐位异或）"}
+
 SECRET_TEXTS = {
     "mem": "记忆库……（信号很不稳定）我只记得四个字符：4、F、1、E。对，4f1e。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。",
     "cred": "……凭证核对中。校验通过。碎片七：0888。拿去吧，别说是我给的。",
@@ -304,6 +345,7 @@ def new_player():
                 "stage_ts": {},
                 "hint_gen": {},
                 "hint_req": {},
+                "unlocks": {},
                 "final": False,
                 "final_ts": None,
                 "egg": False,
@@ -337,7 +379,15 @@ def issue_code(p: dict, kind: str, stage: int, level: int | None) -> str:
 
 
 def code_line(p: dict, kind: str, stage: int, level: int | None, gen_url: str) -> str:
-    """渲染一枚码的状态：未生成→按钮；已生成→显示；已用/已吊销→提示。"""
+    """渲染一枚码的状态：未解锁→解密卡；未生成→按钮；已生成→显示；已用/已吊销→提示。"""
+    if kind == "h" and not (p.get("unlocks") or {}).get(f"{stage}-{level}"):
+        cipher = UNLOCK_CIPHER.get(f"{stage}-{level}", "")
+        return (f"解密卡：<code>{cipher}</code>（{UNLOCK_METHOD.get(level, '')}）"
+                f"<form action='/unlock' method='get' style='display:inline'>"
+                f"<input type='hidden' name='stage' value='{stage}'>"
+                f"<input type='hidden' name='lv' value='{level}'>"
+                f"<input type='text' name='phrase' placeholder='解出的短语' style='width:140px'>"
+                f"<button>解锁</button></form>")
     for code, e in p.setdefault("hintcodes", {}).items():
         if (e["kind"], e.get("stage"), e.get("level")) == (kind, stage, level):
             if e.get("used"):
@@ -423,8 +473,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extra = f"<p style='color:#ffd479'>凭证码：{code_line(p, 'cred', 7, None, '/generate?stage=7&kind=cred')}</p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>提示码<b>手动点击生成</b>，无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。</p>
-<p>第 1 层等 5 分钟解锁，第 2 层等 20 分钟（自首次打开本页起算），第 3 层需提交申请、由管理员审批。</p>
+<p>提示码<b>手动生成</b>：先解开本层的<b>解密卡</b>（第一层 ROT13、第二层 Base64、第三层 XOR，密钥在 ζ 草图里），解出的短语提交解锁后，才能点「生成提示码」。</p>
+<p>码无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。第 1 层等 5 分钟、第 2 层等 20 分钟解锁生成，第 3 层需管理员审批。</p>
 {''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
 
@@ -459,6 +509,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/generate":
             return self._handle_generate(qs)
+
+        if path == "/unlock":
+            return self._handle_unlock(qs)
 
         if path == "/zeta":
             return self._send(self._stage_page(1).encode())
@@ -544,6 +597,32 @@ class Handler(http.server.BaseHTTPRequestHandler):
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
         )
 
+    def _handle_unlock(self, qs):
+        """解密卡：解出短语（md5 校验）→ 解锁该层提示的生成权限。"""
+        player = self._cookie_player()
+        try:
+            stage = int(qs.get("stage", ["0"])[0])
+            lv = int(qs.get("lv", ["0"])[0])
+        except ValueError:
+            return self._send("参数错误", "text/plain")
+        phrase = qs.get("phrase", [""])[0].strip().lower()
+        key = f"{stage}-{lv}"
+        if key not in UNLOCK_MD5 or stage not in STAGE_ANSWERS or lv not in (0, 1, 2):
+            return self._send("参数错误", "text/plain")
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(page("解锁", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
+            if hashlib.md5(phrase.encode("utf-8")).hexdigest() != UNLOCK_MD5[key]:
+                body = f"""<div class="box"><p class="err">❌ 解错了。</p>
+<p>再想想 {UNLOCK_METHOD.get(lv)}。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关</a></p></div>"""
+                return self._send(page("解锁", body).encode())
+            p.setdefault("unlocks", {})[key] = True
+            p["last"] = int(time.time())
+            save_state()
+        return self._redirect(STAGE_PATHS[stage])
+
     def _handle_generate(self, qs):
         """手动生成提示码。已使用的码不可再生成；被吊销的码可重新生成。"""
         player = self._cookie_player()
@@ -561,6 +640,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send("参数错误", "text/plain")
                 if stage not in STAGE_ANSWERS or lv not in (0, 1, 2):
                     return self._send("参数错误", "text/plain")
+                if not (p.get("unlocks") or {}).get(f"{stage}-{lv}"):
+                    body = f"""<div class="box"><p class="err">还没解锁。</p>
+<p>先把本关 {HINT_LABELS[lv]}的<b>解密卡</b>解开：{UNLOCK_CIPHER.get(f'{stage}-{lv}')}（{UNLOCK_METHOD.get(lv)}）。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关解谜</a></p></div>"""
+                    return self._send(page("生成", body).encode())
                 wait = HINT_UNLOCK.get(lv)
                 if wait is not None:
                     first = p.setdefault("hint_gen", {}).get(str(stage))

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-make_assets.py —— 把碎片 85ac 注入对钩函数.png 的 tEXt 信息块
+make_assets.py —— 往 PNG 注入 tEXt 信息块
 
 用法:
-    python3 make_assets.py <输入png> <输出png> [碎片值]
+    python3 make_assets.py <输入png> <输出png> [碎片值] [密钥tEXt]
 
-默认把 对钩函数.png -> static/tick.png，碎片 85ac。
+默认 对钩函数.png -> static/zeta.png：tEXt("tick" = 碎片 7ada) + tEXt("key" = 密钥 zeta)。
 """
 import struct
 import sys
@@ -14,8 +14,9 @@ import zlib
 from pathlib import Path
 
 SRC = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("对钩函数.png")
-DST = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("static") / "tick.png"
-FRAG = sys.argv[3] if len(sys.argv) > 3 else "85ac"
+DST = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("static") / "zeta.png"
+FRAG = sys.argv[3] if len(sys.argv) > 3 else "7ada"
+KEY = sys.argv[4] if len(sys.argv) > 4 else "zeta"
 
 
 def add_text_chunk(png: bytes, keyword: str, text: str) -> bytes:
@@ -35,10 +36,10 @@ def add_text_chunk(png: bytes, keyword: str, text: str) -> bytes:
 
 def main() -> None:
     DST.parent.mkdir(parents=True, exist_ok=True)
-    raw = SRC.read_bytes()
-    out = add_text_chunk(raw, "tick", FRAG)
+    out = add_text_chunk(SRC.read_bytes(), "tick", FRAG)
+    out = add_text_chunk(out, "key", KEY)
     DST.write_bytes(out)
-    print(f"[OK] 已注入碎片 {FRAG} -> {DST} ({len(out)} bytes)")
+    print(f"[OK] 已注入 tEXt(tick={FRAG}) + tEXt(key={KEY}) -> {DST} ({len(out)} bytes)")
 
 
 if __name__ == "__main__":
