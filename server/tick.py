@@ -1006,14 +1006,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 for i in range(1, 9)
             )
             used_count = sum(1 for e in (p.get("hintcodes") or {}).values() if e.get("used"))
-            used_cell = f"已用 {used_count} <a href='/admin?pass={ADMIN_TOKEN}&view={code}' style='font-size:11px'>详情</a>" if used_count else "—"
+            used_cell = f"已用 {used_count}" if used_count else "—"
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
                 f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
                 f"<td style='font-size:11px'>{used_cell}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td>"
-                f"<td><a href='/admin?pass={ADMIN_TOKEN}&del={code}' style='color:#ff6b6b' "
+                f"<td><a href='/admin?pass={ADMIN_TOKEN}&view={code}'>详情</a> "
+                f"<a href='/admin?pass={ADMIN_TOKEN}&del={code}' style='color:#ff6b6b' "
                 f"onclick=\"return confirm('确认删除玩家 {code}？')\">删除</a></td></tr>"
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
