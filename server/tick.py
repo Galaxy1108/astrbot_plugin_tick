@@ -427,7 +427,8 @@ def issue_session(player: str) -> str:
     return token
 
 
-GRACE_TTL = 60  # 轮换后旧 token 的宽限期（秒）
+GRACE_TTL = 60        # 轮换后旧 token 的宽限期（秒）
+ROTATE_INTERVAL = 600  # 会话轮换间隔：每 10 分钟轮换一次（防复用，也不踢掉正常用户）
 
 def session_player(sess: str) -> str:
     """会话 token -> 绑定码；无效/过期/宽限期过返回空。"""
@@ -447,13 +448,18 @@ def session_player(sess: str) -> str:
 
 
 def rotate_session(player: str) -> str:
-    """会话轮换：该玩家旧 token 进入 60 秒宽限期，签发全新 token。"""
+    """会话轮换：距上次轮换不足 10 分钟则直接续期返回现有 token；
+    超过则旧 token 进入 60 秒宽限期，签发全新 token。"""
     now = int(time.time())
     for t, v in list(STATE["sessions"].items()):
         if v.get("player") == player and not v.get("grace_until"):
+            if v.get("rot", 0) and now - v["rot"] < ROTATE_INTERVAL:
+                v["expire"] = now + SESS_TTL
+                return t  # 10 分钟内：续期不轮换
             v["grace_until"] = now + GRACE_TTL
+            break
     token = secrets.token_hex(16)
-    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL}
+    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL, "rot": now}
     return token
 
 
