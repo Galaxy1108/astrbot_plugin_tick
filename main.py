@@ -104,7 +104,7 @@ class Main(Star):
         super().__init__(context)
         self.config = config or {}
         self._poll_task: asyncio.Task | None = None
-        self.context.add_llm_tools(VerifyFragmentsTool(self))
+        self.context.add_llm_tools(VerifyFragmentsTool(star=self))
 
     async def initialize(self) -> None:
         self._poll_task = asyncio.create_task(self._poll_loop())
