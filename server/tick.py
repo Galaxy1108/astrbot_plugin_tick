@@ -1300,7 +1300,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             count, mx = player_progress(p)
             cells = "".join(
                 f"<td class='{"done" if p["stages"].get(str(i)) else "todo"}'>{"✓" if p["stages"].get(str(i)) else "·"}</td>"
-                for i in range(1, 9)
+                for i in range(1, 8)
             )
             used_count = sum(1 for e in (p.get("hintcodes") or {}).values() if e.get("used"))
             used_cell = f"已用 {used_count}" if used_count else "—"
@@ -1317,7 +1317,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"onclick=\"return confirm('确认删除玩家 {code}？')\">删除</a></td></tr>"
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
-                + "".join(f"<th>{i}</th>" for i in range(1, 9))
+                + "".join(f"<th>{i}</th>" for i in range(1, 8))
                 + "<th>碎片8</th><th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
         body = f"""{flash}{pending_html}<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关真结局：{sum(1 for _, p in rows if p['final'])} ｜ 到达假结局：{sum(1 for _, p in rows if p.get('fake'))} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
