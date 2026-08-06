@@ -949,7 +949,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                 elif req and req.get("status") == "pending":
                                     status = "<span class='todo'>待审批</span>"
                                     act = (f"<a href='/admin?pass={ADMIN_TOKEN}&approve={qs['view'][0]}&stage={st}'>批准</a> "
-                                           f"<a href='/admin?pass={ADMIN_TOKEN}&reject={qs['view'][0]}&stage={st}'>驳回</a>")
+                                           f"<a href='#' onclick=\"var r=prompt('驳回理由：'); if(r!==null) location.href='/admin?pass={ADMIN_TOKEN}&reject={qs['view'][0]}&stage={st}&reason='+encodeURIComponent(r); return false;\">驳回</a>")
                                 elif req and req.get("status") == "rejected":
                                     status = "<span class='err'>被驳回</span>"
                                     act = f"<a href='/admin?pass={ADMIN_TOKEN}&approve={qs['view'][0]}&stage={st}'>直接批准</a>"
