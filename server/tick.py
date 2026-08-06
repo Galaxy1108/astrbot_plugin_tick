@@ -392,8 +392,13 @@ def load_state():
     p = DATA_DIR / "progress.json"
     if p.exists():
         try:
-            STATE = json.loads(p.read_text(encoding="utf-8"))
+            STATE = json.loads(p.read_text(encoding="utf-8-sig"))
         except Exception:
+            # 数据文件损坏绝不静默清空：备份原文件，以空状态启动并在日志标记
+            try:
+                (DATA_DIR / "progress.broken.json").write_bytes(p.read_bytes())
+            except Exception:
+                pass
             STATE = {"players": {}}
     STATE.setdefault("players", {})
     # 通知指针持久化在网页端文件里：插件重装/指针丢失也不重放
