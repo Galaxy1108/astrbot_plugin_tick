@@ -442,10 +442,19 @@ def gen_frags():
 
 
 def ensure_frags(p: dict) -> None:
-    """老玩家/新玩家补发个人碎片。"""
+    """老玩家/新玩家补发个人碎片；老记录迁移缺失的元数据字段。"""
     if not p.get("frags"):
         frags, meta = gen_frags()
         p["frags"], p["frag_meta"] = frags, meta
+    else:
+        m = p.setdefault("frag_meta", {})
+        f = p["frags"]
+        if not m.get("v5h"):
+            m["v5h"] = hashlib.md5(f[4].encode()).hexdigest()
+        if not m.get("p4") and f[3] in PNG_CODES:
+            m["p4"] = PNG_CODES.index(f[3]) + 1
+        for k in ("v5", "v5a", "v5b", "v5x"):
+            m.pop(k, None)
 
 
 def player_progress(p):
@@ -1011,13 +1020,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._send(page("碎片 8 · 真相", body + self._hint_box(8, player), check_stage=8).encode())
 
     def _handle_vault(self, qs):
-        """第 5 关保险库：按便签规则从干扰字符里取碎片 5 的后两位。"""
+        """第 5 关保险库：便签 = md5(碎片5)，玩家枚举后两位撞库。"""
         player = self._cookie_player()
         with LOCK:
             p = STATE["players"].get(player)
             if not p:
                 return self._send(page("vault", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
             ensure_frags(p)
+            save_state()  # 老玩家迁移落盘
             m = p["frag_meta"]
             body = f"""<div class="box">
 <p>苏桁的便签，贴在保险库的门上：</p>
