@@ -196,6 +196,16 @@ def secret_text(kind: str, p: dict) -> str:
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
 STAGE_PATHS = {1: "/stage1", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
+STAGE_PAGES = {
+    1: ["/stage1"],
+    2: ["/stage2", "/secret"],
+    3: ["/stage3"],
+    4: ["/stage4"],
+    5: ["/stage5"],
+    6: ["/stage6"],
+    7: ["/stage7"],
+    8: ["/final"],
+}
 
 PAGE_CSS = """
 body { background:#0e1116; color:#d7dde4; font-family:"Microsoft YaHei",system-ui,sans-serif;
@@ -712,6 +722,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 </div>"""
         return page("ζ 计划", body)
 
+    def _back_to(self, stage: int) -> str:
+        """生成提示码后回到玩家所在的关卡页（按 Referer），否则回规范路径。"""
+        ref = self.headers.get("Referer", "")
+        try:
+            ref_path = urllib.parse.urlparse(ref).path
+        except Exception:
+            ref_path = ""
+        if ref_path in STAGE_PAGES.get(stage, []):
+            return ref_path
+        return STAGE_PATHS[stage]
+
     def _stage_gate(self, stage: int):
         """页面访问门禁：需绑定 QQ；第 N 关页面需完成第 1~N-1 关。
         返回 "join"=未领绑定码、"bind"=未绑 QQ、整数=缺失关、None=放行。"""
@@ -821,7 +842,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         return self._send(page("生成", body).encode())
                 issue_code(p, "h", stage, lv)
                 save_state()
-                return self._redirect(STAGE_PATHS[stage])
+                return self._redirect(self._back_to(stage))
             if kind == "mem":
                 issue_code(p, "mem", 5, None)
                 save_state()
