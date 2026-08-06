@@ -410,6 +410,7 @@ def load_state():
     STATE.setdefault("sessions", {})      # token -> {"player": 绑定码, "expire": 秒}
     STATE.setdefault("challenges", {})    # 验证码 -> {"player", "qq", "expire", "tries"}
     STATE.setdefault("outbox", [])        # 待推送队列 [{id, qq, player, text, ts}]
+    STATE.setdefault("check_guard", {})   # 答案提交限速 {key: {"win": 秒, "cnt": n, "lock": 秒}}
     # 通知指针持久化在网页端文件里：插件重装/指针丢失也不重放
     STATE.setdefault("notify_last", 0)
 
@@ -426,15 +427,34 @@ def issue_session(player: str) -> str:
     return token
 
 
+GRACE_TTL = 60  # 轮换后旧 token 的宽限期（秒）
+
 def session_player(sess: str) -> str:
-    """会话 token -> 绑定码；无效/过期返回空。"""
+    """会话 token -> 绑定码；无效/过期/宽限期过返回空。"""
     v = STATE["sessions"].get(sess)
     if not v:
         return ""
-    if v.get("expire", 0) < int(time.time()):
+    now = int(time.time())
+    if v.get("expire", 0) < now:
         STATE["sessions"].pop(sess, None)
         return ""
+    if v.get("grace_until", 0):
+        if v["grace_until"] < now:
+            STATE["sessions"].pop(sess, None)
+            return ""
+        return v.get("player", "")  # 宽限期内旧 token 只读有效（轮换会再发新 token）
     return v.get("player", "")
+
+
+def rotate_session(player: str) -> str:
+    """会话轮换：该玩家旧 token 进入 60 秒宽限期，签发全新 token。"""
+    now = int(time.time())
+    for t, v in list(STATE["sessions"].items()):
+        if v.get("player") == player and not v.get("grace_until"):
+            v["grace_until"] = now + GRACE_TTL
+    token = secrets.token_hex(16)
+    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL}
+    return token
 
 
 def old_cookie_code(headers_cookie: str) -> str:
@@ -570,15 +590,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+    def _rotate_if_session(self) -> None:
+        """会话轮换：有有效会话的请求，签发新 token 并随响应下发（旧 token 宽限 60 秒）。"""
+        self._rotated_sess = ""
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == COOKIE_NAME and v.strip():
+                with LOCK:
+                    player = session_player(v.strip())
+                    if player:
+                        self._rotated_sess = rotate_session(player)
+                        save_state()
+                return
+
     def _send(self, body, ctype="text/html; charset=utf-8", code=200, extra_headers=None):
         if isinstance(body, str):
             body = body.encode("utf-8")
+        if isinstance(extra_headers, dict):
+            extra_headers = list(extra_headers.items())
+        headers = list(extra_headers or [])
+        # 会话轮换：每次响应下发新 tick_sess（若本请求已带其他会话 cookie 则跳过）
+        token = getattr(self, "_rotated_sess", "")
+        if token and not any(k.lower() == "set-cookie" and str(v).startswith("tick_sess=") for k, v in headers):
+            headers.append(("Set-Cookie", f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"))
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        if isinstance(extra_headers, dict):
-            extra_headers = list(extra_headers.items())
-        for k, v in (extra_headers or []):
+        for k, v in headers:
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -657,6 +695,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
+        self._rotate_if_session()
 
         # 旧登录方式强制升级：只有旧式绑定码 cookie、且无有效会话时，触发 QQ 推送验证
         if path not in ("/join",) and not path.startswith("/api/") and path != "/admin":
@@ -1135,6 +1174,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if stage not in (1, 2, 3, 4, 5, 6, 7):
             return self._send("没有这一关。", "text/plain")
         with LOCK:
+            # 答案提交限速：每玩家 10 秒最多 5 次；连错过多则锁定 60 秒；答对清零
+            now = int(time.time())
+            g = STATE["check_guard"].setdefault(player, {"win": now, "cnt": 0, "lock": 0, "fails": 0})
+            if g["lock"] > now:
+                return self._send(
+                    f"<span class='err'>提交太频繁，已暂停。</span><br>约 {max(1, (g['lock'] - now + 59) // 60)} 分钟后恢复。",
+                    "text/html; charset=utf-8",
+                )
+            if now - g["win"] >= 10:
+                g["win"], g["cnt"] = now, 0
+            if g["cnt"] >= 5:
+                g["lock"] = now + 60
+                g["cnt"] = 0
+                save_state()
+                return self._send(
+                    "<span class='err'>提交太频繁。</span><br>先冷静 1 分钟，或者用专属提示码，别硬猜。",
+                    "text/html; charset=utf-8",
+                )
+            g["cnt"] += 1
             p = STATE["players"].get(player)
             if not p:
                 return self._send(
@@ -1155,6 +1213,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "text/html; charset=utf-8",
                     )
             if ans != p["frags"][stage - 1]:
+                g["fails"] += 1
+                if g["fails"] >= 10:
+                    g["lock"] = now + 60
+                    g["fails"] = 0
+                    save_state()
+                    return self._send(
+                        "<span class='err'>连续错太多。</span><br>已暂停 1 分钟。答案是动态生成的，硬猜没有用。",
+                        "text/html; charset=utf-8",
+                    )
+                save_state()
                 pre = f"<br>（需先完成第 {stage-1} 关）" if stage > 1 else ""
                 return self._send(
                     f"<span class='err'>❌ 不对哦。</span><br>"
@@ -1166,6 +1234,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             p["stages"][str(stage)] = True
             if not already:
                 p["stage_ts"][str(stage)] = now_ms()  # 首次通过才产生事件/通知
+            g["fails"], g["cnt"] = 0, 0  # 答对清零限速
             p["last"] = now
             count, _ = player_progress(p)
             save_state()
