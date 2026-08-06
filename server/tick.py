@@ -346,8 +346,8 @@ def stage_body(p: dict, stage: int) -> str:
 </div>
 """ + f"""
 <div class="box">
-<p>录音里藏着一段四位数。苏桁给每个人都加了一把偏移锁——你的偏移量是 <b>{m['o7']}</b>。</p>
-<p>把那段四位数的<b>每一位</b>数字都加上 {m['o7']}（超过 9 就减 10），得到的就是碎片 7。</p>
+<p>录音里藏着一段四位数。</p>
+<p>苏桁给每个人都加了一把偏移锁——你的偏移量是 <b>{m['o7']}</b>。</p>
 </div>
 """
 
@@ -959,7 +959,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if stage == 8:
             nxt = "恭喜，8 个碎片齐了！<a href='/final'>去 /final 拼接访问码</a>"
         elif stage == 7:
-            nxt = "访问码 = 碎片按关卡顺序首尾相接。<a href='/final'>去 /final 验证看看</a>"
+            nxt = "访问码 = 碎片按关卡顺序首尾相接。<a href='/final'>去 /final 输入验证</a>"
         else:
             nxt = f"<a href='{NEXT_PAGE[stage]}'>前往下一关 →</a>"
         return self._send(
@@ -1009,11 +1009,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>像是缺了什么。真正的答案，好像从来都不在网页上。</p>
 <p>苏桁的 AI 还活着。也许，该去问问她。</p></div>"""
                 return self._send(page("对钩……？", body).encode())
-        body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
-<p>访问码 = 碎片按关卡顺序首尾相接。再核对一遍，是不是还缺了一块？</p>
-<p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>
+        err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
+        body = f"""<div class="box"><p class="frag">访问码</p>
+<p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
+{err}
+<form method="get"><input type="text" name="key" placeholder="例如 66b2cac2…（共 32 位）" style="width:300px"><button>验证</button></form>
+<p style="font-size:12px;color:#6b7683">拿到第 8 块碎片后，8 块一起拼接验证。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
-<p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p></div>"""
+<p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p>
+<p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>"""
         return self._send(page("碎片 8 · 真相", body + self._hint_box(8, player), check_stage=8).encode())
 
     def _handle_vault(self, qs):
