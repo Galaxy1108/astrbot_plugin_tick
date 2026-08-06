@@ -276,8 +276,8 @@ def secret_svg(b64: str) -> str:
   <rect width="360" height="180" fill="#0e1116"/>
   <path d="M 20 150 C 70 135, 110 125, 150 105 S 250 45, 340 14" stroke="#6ee7a0" stroke-width="2" fill="none"/>
   <circle cx="150" cy="105" r="3.5" fill="#22c55e"/>
-  <text x="18" y="26" font-family="monospace" font-size="12" fill="#0e1116">{b64}</text>
-  <text x="300" y="166" font-family="monospace" font-size="10" fill="#0e1116">f(x) = x + 1/x</text>
+  <text x="18" y="26" font-family="monospace" font-size="12" fill="#0e1116" style="user-select:none;-webkit-user-select:none">{b64}</text>
+  <text x="300" y="166" font-family="monospace" font-size="10" fill="#0e1116" style="user-select:none;-webkit-user-select:none">f(x) = x + 1/x</text>
 </svg>""".format(b64=b64)
 
 
@@ -640,7 +640,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             g = self._stage_gate(2)
             if g is not None:
                 return self._send(self._locked_page(2, g).encode())
-            return self._send(self._stage_page(2).encode())
+            return self._send(self._secret_page().encode())
         if path == "/stage3":
             g = self._stage_gate(3)
             if g is not None:
@@ -741,6 +741,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if ref_path in STAGE_PAGES.get(stage, []):
             return ref_path
         return STAGE_PATHS[stage]
+
+    def _secret_page(self):
+        """第 2 关：/secret 只有一张图，无提示区、无答案框（确认与提示都在 /stage2）。"""
+        player = self._cookie_player()
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return page("碎片 2", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>")
+            ensure_frags(p)
+            import base64 as _b64
+            b64 = _b64.b64encode(p["frags"][1].encode()).decode()
+        return page("碎片 2", f"""<div class="box">{secret_svg(b64)}</div>""")
 
     def _stage_gate(self, stage: int):
         """页面访问门禁：需绑定 QQ；第 N 关页面需完成第 1~N-1 关。
