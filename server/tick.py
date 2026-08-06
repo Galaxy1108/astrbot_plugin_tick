@@ -16,7 +16,7 @@
     后台 /admin 输入泄露的码可定位泄密者。
 
 路由:
-    /（首页=第1关） /secret /stage3~7   关卡页（含玩家专属提示码）；/zeta 已废弃
+    /（首页=公告） /stage1 /secret /stage3~7   关卡页；/zeta 已废弃
     /join                 领取/恢复绑定码（写 cookie tick_player）
     /check                校验答案并记录进度
     /final                终局（成功页签发彩蛋码）
@@ -181,7 +181,7 @@ def secret_text(kind: str, p: dict) -> str:
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
-STAGE_PATHS = {1: "/", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
+STAGE_PATHS = {1: "/stage1", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
 
 PAGE_CSS = """
 body { background:#0e1116; color:#d7dde4; font-family:"Microsoft YaHei",system-ui,sans-serif;
@@ -549,6 +549,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         if path in ("/", "/index.html"):
+            return self._send(self._home_page().encode())
+        if path == "/stage1":
             g = self._stage_gate(1)
             if g is not None:
                 return self._send(self._locked_page(1, g).encode())
@@ -674,6 +676,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         self._send(b"404 Not Found", "text/plain", 404)
 
+    def _home_page(self):
+        """首页 = 公告/提示（不含任何关卡内容）。"""
+        body = """<div class="box">
+<p>苏桁，你的大学数学系同学，主攻黎曼 ζ 函数与数论——那个连 1+2+3+… 都能等于 -1/12 的世界。三周前，他失踪了。</p>
+<p>他留给你唯一的线索，是他一直在维护的这台服务器。他说过："真正的入口，藏在不被注意的地方。"</p>
+</div>
+<div class="box"><p class="frag">开始之前</p>
+<ol>
+<li>去 <a href="/join">/join</a> 领取你的绑定码；</li>
+<li>回群里 @汐月 发送 <code>/bind &lt;绑定码&gt;</code>，绑定你的 QQ；</li>
+<li>然后从 <a href="/stage1"><b>第 1 关</b></a> 开始。</li>
+</ol>
+<p style="color:#6b7683">卡关时，私聊汐月用提示码换提示。</p>
+</div>"""
+        return page("ζ 计划", body)
+
     def _stage_gate(self, stage: int):
         """页面访问门禁：需绑定 QQ；第 N 关页面需完成第 1~N-1 关。
         返回 "join"=未领绑定码、"bind"=未绑 QQ、整数=缺失关、None=放行。"""
@@ -737,7 +755,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 {extra}
 <p style="color:#6b7683">不小心又进了 /join？没关系——身份不会重置，这里始终显示你原来的绑定码和进度。换设备/清 cookie 后，回 /join 输入绑定码即可恢复；绑定码彻底忘了就私聊汐月发送 <code>/找回</code>。</p>
 </div>
-<a href="/" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/stage1" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(
             page("玩家中心", body).encode(),
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
@@ -973,7 +991,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>苏桁写的一封信，收件人是汐月：</p>
 <pre>{HIDDEN_LETTER}</pre>
 <p style="color:#6b7683">—— 隐藏结局 · 解锁</p></div>
-<a href="/" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/stage1" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(page("隐藏结局 · 苏桁的信", body).encode())
 
     def _handle_admin(self, qs):
