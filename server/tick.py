@@ -811,7 +811,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if code not in STATE["players"]:
                 return self._send(page("绑定码无效", "<div class='box'><p class='err'>这个绑定码不存在。</p><p><a href='/join'>重新领取</a></p></div>").encode())
             count, _ = player_progress(STATE["players"][code])
-            extra = f"<p>已绑定 QQ：{STATE['players'][code]['qq'] or '未绑定'} ｜ 已通关 {count}/8 关 ｜ 身份恢复/保留中，不会重置。</p>"
+            extra = f"<p>已绑定 QQ：{STATE['players'][code]['qq'] or '未绑定'} ｜ 已通关 {count} 关 ｜ 身份恢复/保留中，不会重置。</p>"
         body = f"""<div class="box">
 <p class="frag">你的绑定码：{code}</p>
 <p>把它记住，然后按下面 3 步走：</p>
@@ -965,11 +965,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if stage == 8:
             nxt = "恭喜，8 个碎片齐了！<a href='/final'>去 /final 拼接访问码</a>"
         elif stage == 7:
-            nxt = "访问码 = 碎片按关卡顺序首尾相接。<a href='/final'>去 /final 输入验证</a>"
+            nxt = "<br>访问码 = 碎片按关卡顺序首尾相接。去 <a href='/final'>/final</a> 输入验证（或直接在网址后面加 ?key=访问码）"
         else:
             nxt = f"<a href='{NEXT_PAGE[stage]}'>前往下一关 →</a>"
         return self._send(
-            f"<span class='ok'>✅ 对钩！碎片 {stage} 已确认。</span>（进度 {count}/8）{nxt}",
+            f"<span class='ok'>✅ 对钩！碎片 {stage} 已确认。</span>（已收集 {count} 块碎片）{nxt}",
             "text/html; charset=utf-8",
         )
 
@@ -1018,8 +1018,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
         body = f"""<div class="box"><p class="frag">访问码</p>
 <p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
+<p style="font-size:12px;color:#6b7683">也可以在地址栏直接访问 /final?key=&lt;访问码&gt;</p>
 {err}
-<form method="get"><input type="text" name="key" placeholder="例如 66b2cac2…（共 32 位）" style="width:300px"><button>验证</button></form>
+<form method="get"><input type="text" name="key" placeholder="例如 66b2cac2…" style="width:300px"><button>验证</button></form>
 <p style="font-size:12px;color:#6b7683">拿到第 8 块碎片后，8 块一起拼接验证。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p>

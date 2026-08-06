@@ -241,7 +241,7 @@ class Main(Star):
         used_line = (" ｜ 已用：" + "、".join(used)) if used else ""
         egg = " ｜ 彩蛋 ✓" if ret.get("egg") else ""
         yield event.plain_result(
-            f"你的进度：{ret.get('count', 0)}/8 关 ｜ {line}{used_line}{' ｜ 终局 ✓' if ret.get('final') else ''}{egg}"
+            f"已收集 {ret.get('count', 0)} 块碎片 ｜ {line}{used_line}{' ｜ 终局 ✓' if ret.get('final') else ''}{egg}"
         )
 
     # ---------- 第 8 关「套话」：念出自己的碎片 → 注入人格扩展区域；说破真相 → 给个人第 8 块 ----------
