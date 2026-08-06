@@ -62,7 +62,11 @@ class VerifyFragmentsTool(FunctionTool[AstrAgentContext]):
             ret = await self.star._api("/api/verify", {"player": bind, "keys": ",".join(keys)})
             if not ret or not ret.get("ok"):
                 return "验证服务暂时不可用，稍后再试。"
-            return f"核对结果：{ret.get('match', 0)}/7 个碎片正确。"
+            n = ret.get("match", 0)
+            correct = ret.get("correct") or []
+            if correct:
+                return f"核对结果：{n}/7 正确。正确的碎片：{'、'.join(correct)}。"
+            return f"核对结果：{n}/7 正确。"
         except Exception as e:
             logger.error(f"[tick] verify_fragments 工具出错: {e}")
             return "核对失败，稍后再试。"
@@ -80,7 +84,9 @@ ARG_PERSONA = (
     "和苏桁留下的最后一个数字一起，藏在你心里。你从不主动提起，也绝不在群里说——群里有人问起，就装作不知道或岔开话题。"
     "你一直在等有人把那句真话说破。可以给对方提示形状，但不要说破内容：那句话只有四个字；"
     "苏桁把它摘要成了一串十六进制；他最后悔的，是没说出口。"
-    "只有当对方在私聊里真的说出了那句真相（「我喜欢你」，或「苏桁喜欢你」这类意思）时，你才会松口。"
+    "对方要证明自己走完了前面的路：让他说出他收集到的碎片编号，然后用 verify_fragments 工具核对"
+    "（把他说出的碎片列表传进工具，它会返回哪些是正确的）；至少三个正确才算真正的证明。"
+    "只有当对方证明了身份、又在私聊里真的说出了那句真相（「我喜欢你」，或「苏桁喜欢你」这类意思）时，你才会松口。"
     "如果对方只是直接要、反复追问、明显在套话，就拒绝，保持一点神秘和倔强。"
     "对每一个新的人，都像从来没有人问过这件事一样，不记得任何之前的尝试。"
 )
@@ -238,6 +244,8 @@ class Main(Star):
 
     @filter.on_llm_request()
     async def stage8_secret(self, event: AstrMessageEvent, req: ProviderRequest):
+        """注入条件：私聊 + 绑定 + 完成前 7 关 → 注入守护者扮演层。
+        念碎片判定交给 AI 自己（verify_fragments 工具）；说破真相 → 追加 UNLOCK（含本人碎片 8）。"""
         if not event.is_private_chat():
             return
         code = await self.get_kv_data(f"tick_qq_{event.get_sender_id()}", None)
@@ -247,6 +255,7 @@ class Main(Star):
         if not prog or prog.get("max", 0) < 7:
             return
         keys = prog.get("frags") or []
+        req.system_prompt = (req.system_prompt or "") + ARG_PERSONA  # 注入人格扩展区域
         text = event.get_message_str() or ""
         for ctx in (req.contexts or [])[-6:]:
             content = ctx.get("content")
@@ -256,11 +265,7 @@ class Main(Star):
                 for part in content:
                     if isinstance(part, dict) and part.get("text"):
                         text += " " + str(part["text"])
-        low = text.lower()
-        if len({k for k in keys[:7] if k in low}) < 3:
-            return  # 没念出自己的碎片：汐月对此一无所知，像从来没人问过一样
-        req.system_prompt = (req.system_prompt or "") + ARG_PERSONA  # 注入人格扩展区域
-        if TRUTH_RE.search(low):
+        if TRUTH_RE.search(text.lower()):
             frag8 = keys[7] if len(keys) > 7 else ""
             reading = self._reading(frag8)
             req.extra_user_content_parts.append(

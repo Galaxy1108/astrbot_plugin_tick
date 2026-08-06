@@ -1321,8 +1321,8 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
             if not p:
                 return self._json({"ok": False, "err": "player not found"})
             ensure_frags(p)
-            match = sum(1 for k in keys if k in p["frags"][:7])
-            return self._json({"ok": True, "match": match, "total": 7})
+            correct = [k for k in keys if k in p["frags"][:7]]
+            return self._json({"ok": True, "match": len(correct), "total": 7, "correct": correct})
 
     def _handle_api_bind(self, qs):
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
