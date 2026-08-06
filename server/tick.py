@@ -160,7 +160,7 @@ def render_hint(p: dict, stage: int, level: int) -> str:
         return [
             "这一关要问汐月自己。私聊她，用下方「专属提示码」区的记忆库开启码。",
             "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。她只记得前两个字符——另一半在服务器上的 /vault 里。",
-            f"/submit 0x<记忆库开启码> 给你前两位；再去 /vault 按便签规则取后两位，拼成 {f[4]}。",
+            f"/submit 0x<记忆库开启码> 给你前两位 {f[4][:2]}；/vault 便签 md5 的原文是 {f[4]}（后两位 {f[4][2:]}），拼成 {f[4]}。",
         ][level]
     if stage == 6:
         return [
@@ -435,15 +435,9 @@ def gen_frags():
     f4 = PNG_CODES[p4 - 1]
     o7 = secrets.randbelow(10)
     f7 = "".join(str((int(c) + o7) % 10) for c in MORSE_BASE)
-    va = secrets.randbelow(5) + 1
-    vb = secrets.randbelow(6 - va) + va + 1  # vb ∈ (va, 6]，避免 randbelow(0) 崩溃
-    pool = [f5[2], f5[3]] + [secrets.choice("0123456789abcdef") for _ in range(4)]
-    v5 = list(pool[:4])
-    v5.insert(va - 1, f5[2])
-    v5.insert(vb - 1, f5[3])
+    v5h = hashlib.md5(f5.encode()).hexdigest()  # 便签 = md5(完整碎片5)，不可逆，需撞库
     return [f1, f2, f3, f4, f5, f6, f7, f8], {
-        "m6": m6, "p4": p4, "o7": o7,
-        "v5": "".join(v5), "v5a": va, "v5b": vb,
+        "m6": m6, "p4": p4, "o7": o7, "v5h": v5h,
     }
 
 
@@ -1027,9 +1021,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             m = p["frag_meta"]
             body = f"""<div class="box">
 <p>苏桁的便签，贴在保险库的门上：</p>
-<pre>{m['v5']}</pre>
-<p>便签背面写着：<b>取第 {m['v5a']} 个和第 {m['v5b']} 个字符</b>。</p>
-<p>把这两个字符接在汐月给你的前两位后面，就是碎片 5。</p>
+<pre>{m['v5h']}</pre>
+<p>便签背面只有一行字：</p>
+<p><b>上面这串 32 位十六进制，是某个四位字符的不可逆摘要。</b></p>
+<p>汐月已经给了你前两位——把后两位补上，试着枚举，直到摘要对上。</p>
+<p>（一位十六进制 16 种可能，两位一共 256 种，写几行代码或者用在线工具都行）</p>
 <p style="font-size:12px;color:#6b7683">（每个玩家的便签都不一样——这扇门只认你。）</p>
 </div>
 <a href="/stage5" style="font-size:13px">← 返回第 5 关</a>"""
