@@ -180,7 +180,7 @@ def secret_text(kind: str, p: dict) -> str:
                 f"后面两个，苏桁说存在服务器上一个叫 vault 的页面里——那是他的保险库。")
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
-NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
+NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
 STAGE_PATHS = {1: "/zeta", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
 
 PAGE_CSS = """
@@ -256,7 +256,6 @@ def stage_body(p: dict, stage: int) -> str:
 <div class="box">
 <p>苏桁，你的大学数学系同学，主攻黎曼 ζ 函数与数论——那是一个连 1+2+3+… 都能等于 -1/12 的世界。三周前，他失踪了。</p>
 <p>他留给你唯一的线索，是他一直在维护的这台服务器。他说过："真正的入口，藏在不被注意的地方。"</p>
-<p>另外，服务器礼节：先去访问一下 <code>/robots.txt</code>。</p>
 <p style="color:#6b7683">新玩家：去 <a href="/join">/join</a> 领取你的绑定码，然后回群里 @汐月 发送 <code>/bind &lt;绑定码&gt;</code> 完成绑定。</p>
 </div>
 <!-- {hexbytes(f[0])} -->
@@ -587,6 +586,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if g is not None:
                 return self._send(self._locked_page(1, g).encode())
             return self._send(self._stage_page(1).encode())
+        if path == "/stage2":
+            g = self._stage_gate(2)
+            if g is not None:
+                return self._send(self._locked_page(2, g).encode())
+            body = """<div class="box">
+<p>碎片 2 没有固定的页面——苏桁把它藏在了这个服务器上某个<b>不常被注意的地方</b>。</p>
+<p>服务器的规矩，有些约定俗成。去找找看。</p>
+</div>"""
+            return self._send(page("碎片 2", body + self._hint_box(2, self._cookie_player()), check_stage=2).encode())
         if path == "/secret":
             g = self._stage_gate(2)
             if g is not None:
@@ -853,14 +861,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "text/html; charset=utf-8",
                     )
             if ans != p["frags"][stage - 1]:
-                pre = f"（需先完成第 {stage-1} 关）" if stage > 1 else "（无需前置关卡）"
+                pre = f"<br>（需先完成第 {stage-1} 关）" if stage > 1 else ""
                 return self._send(
-                    f"<span class='err'>❌ 不对哦。</span> 卡住了？用本页下方的<b>专属提示码</b>，私聊汐月兑换（一次性）。{pre}",
+                    f"<span class='err'>❌ 不对哦。</span><br>"
+                    f"卡住了？用本页答案框上方的<b>专属提示码</b>，私聊汐月兑换（一次性）。{pre}",
                     "text/html; charset=utf-8",
                 )
             now = int(time.time())
+            already = bool(p["stages"].get(str(stage)))
             p["stages"][str(stage)] = True
-            p["stage_ts"][str(stage)] = now
+            if not already:
+                p["stage_ts"][str(stage)] = now  # 首次通过才产生事件/通知
             p["last"] = now
             count, _ = player_progress(p)
             save_state()
