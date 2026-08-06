@@ -889,6 +889,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         flash = f"<div class='box'><p class='err'>已驳回 {target} 的第 {stage} 关申请。</p></div>"
                     save_state()
         decode_html = ""
+        if qs.get("view"):
+            with LOCK:
+                vp = STATE["players"].get(qs.get("view", [""])[0])
+                if vp:
+                    ensure_frags(vp)
+                    rows_v = sorted((vp.get("hintcodes") or {}).items(),
+                                    key=lambda kv: (kv[1].get("used"), kv[1]["gen"]))
+                    ledger = "".join(
+                        f"<tr><td><code>{c}</code></td><td>{code_label(e)}</td>"
+                        f"<td class='{"done" if e.get("used") else "todo"}'>{"已用" if e.get("used") else "未用"}</td>"
+                        f"<td class='{"err" if e.get("revoked") else "done"}'>{"已吊销" if e.get("revoked") else "正常"}</td>"
+                        f"<td>{time.strftime('%m-%d %H:%M', time.localtime(e['gen']))}</td></tr>"
+                        for c, e in rows_v
+                    )
+                    frags = " ".join(vp["frags"])
+                    decode_html = f"""<div class="box"><p class="frag">玩家 {qs['view'][0]} 详情</p>
+<p>QQ：{vp.get('qq') or '—'} ｜ 昵称：{vp.get('name') or '—'} ｜ 进度：{player_progress(vp)[0]}/8</p>
+<p>碎片：<code>{frags}</code></p>
+<table><tr><th>码</th><th>内容</th><th>状态</th><th>吊销</th><th>生成时间</th></tr>{ledger}</table>
+<p><a href="/admin?pass={ADMIN_TOKEN}">← 返回总表</a></p></div>"""
         if qs.get("code", [""])[0]:
             import urllib.request
             code = qs.get("code", [""])[0].strip().lower()
@@ -937,12 +957,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"<td class='{"done" if p["stages"].get(str(i)) else "todo"}'>{"✓" if p["stages"].get(str(i)) else "·"}</td>"
                 for i in range(1, 9)
             )
-            used = " ".join(code_label(e) for e in (p.get("hintcodes") or {}).values() if e.get("used")) or "—"
+            used_count = sum(1 for e in (p.get("hintcodes") or {}).values() if e.get("used"))
+            used_cell = f"已用 {used_count} <a href='/admin?pass={ADMIN_TOKEN}&view={code}' style='font-size:11px'>详情</a>" if used_count else "—"
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
                 f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
-                f"<td style='font-size:11px'>{used}</td>"
+                f"<td style='font-size:11px'>{used_cell}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td>"
                 f"<td><a href='/admin?pass={ADMIN_TOKEN}&del={code}' style='color:#ff6b6b' "
                 f"onclick=\"return confirm('确认删除玩家 {code}？')\">删除</a></td></tr>"
