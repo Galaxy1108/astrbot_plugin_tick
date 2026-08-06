@@ -187,12 +187,29 @@ def now_ms() -> int:
     """事件时间戳用毫秒，避免同秒事件与轮询指针碰撞。"""
     return int(time.time() * 1000)
 
+_egg_footer = ""  # 页脚隐藏彩蛋码（通关终局后渲染，颜色同背景，查源码/选中可见）
+
+def ensure_egg_code(p: dict) -> str:
+    """惰性签发彩蛋码：通关终局后首次渲染时生成，后续复用。"""
+    for e in (p.get("hintcodes") or {}).values():
+        if e.get("kind") == "egg" and not e.get("used"):
+            return next((c for c, x in (p.get("hintcodes") or {}).items() if x is e), "")
+    issue_code(p, "egg", 0, None)
+    save_state()
+    for c, e in (p.get("hintcodes") or {}).items():
+        if e.get("kind") == "egg" and not e.get("used"):
+            return c
+    return ""
+
 def secret_text(kind: str, p: dict) -> str:
     """按玩家渲染秘密内容（记忆库只给前两位，另一半在 /vault）。"""
     if kind == "mem":
         f = p["frags"][4]
         return (f"记忆库……（信号很不稳定）我只记得开头的两个字符：{f[:2]}。"
                 f"后面两个，苏桁说存在服务器上一个叫 vault 的页面里——那是他的保险库。")
+    if kind == "egg":
+        return (f"「{FLAG_INNER}」——这串十六进制，是苏桁一句四字真心话的摘要。"
+                f"猜出那四个字，去 /hidden?phrase=你猜到的四个字 认领。")
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
@@ -258,6 +275,7 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
     footer_html = "<footer>苏桁 · ζ(s) = Σ 1/nˢ"
     if footer_extra:
         footer_html += f" ｜ <span style='font-size:11px;color:#39424e'>{footer_extra}</span>"
+    footer_html += _egg_footer
     footer_html += "</footer>"
     return f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
@@ -588,6 +606,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
+
+        global _egg_footer
+        _egg_footer = ""
+        if path == "/final":  # 藏码只出现在终局页的页脚那一行
+            player = self._cookie_player()
+            with LOCK:
+                p = STATE["players"].get(player)
+                if p and p.get("final"):
+                    code = ensure_egg_code(p)
+                    if code:
+                        _egg_footer = f"<span style='color:#0e1116'>/submit 0x{code}</span>"
 
         if path in ("/", "/index.html"):
             return self._send(self._home_page().encode())
@@ -998,14 +1027,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 p["last"] = now
                 save_state()
                 note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
-                egg_box = f"""<div class="box"><p class="frag">隐藏结局开启码</p>
-<p>{code_line(p, 'egg', 0, None, '/generate?kind=egg')}</p>
-<p style="font-size:12px;color:#6b7683">生成后私聊汐月发送 <code>/submit 0x&lt;码&gt;</code>，读苏桁写给汐月的信。</p>
-<p style="font-size:12px;color:#6b7683">另一个线索：这串十六进制 <code>{FLAG_INNER}</code> 是苏桁一句四个字真心话的摘要——猜出它，去 <code>/hidden</code> 认领。</p></div>"""
                 true_body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FLAG}</pre>
-<p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>{egg_box}"""
+<p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>"""
             elif key == fake_key:
                 now = int(time.time())
                 p["fake"] = True
