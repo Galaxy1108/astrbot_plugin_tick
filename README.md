@@ -18,7 +18,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 | 仓库根目录（`metadata.yaml`/`main.py`/`_conf_schema.json`） | AstrBot 插件本体（汐月：兑付柜台/播报/泄码检测/套话注入/LLM 工具），GitHub 仓库根目录即插件 |
 | `server/tick.py` | ARG 网页服务器（零依赖，Python 标准库）+ 玩家数据库 `data/progress.json` |
 | `server/make_assets.py` | PNG tEXt 隐写注入脚本 |
-| `server/static/zeta.png` | ζ 函数草图：tEXt 块 `key=zeta`（XOR 解密卡密钥）+ `t1`~`t8`（第 4 关 8 个编号块） |
+| `server/static/zeta.png` | ζ 函数草图：tEXt 块 `t1`~`t8`（第 4 关 8 个编号块） |
 | `server/static/beep.wav` | 第 7 关录音：摩斯电码 `----- ---.. ---.. ---..`（0888） |
 
 ---
@@ -76,29 +76,14 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 ```
 「专属提示码」区
- ├─ 第一层：首次打开本关 5 分钟后可解锁
- ├─ 第二层：首次打开本关 20 分钟后可解锁
- ├─ 第三层：点击申请 → 管理员在 /admin 批准 → 私聊通知玩家
- └─ 每层解锁前先解「解密卡」：
-     第一层 ROT13 ｜ 第二层 Base64 ｜ 第三层 XOR（密钥 zeta 藏在 ζ 草图 tEXt 块）
-     解出短语提交（只存 MD5 校验）→ 解锁 → 点「生成提示码」→ 拿到 5 位码
+ ├─ 第一层：首次打开本关 5 分钟后可点「生成提示码」
+ ├─ 第二层：首次打开本关 20 分钟后可点「生成提示码」
+ ├─ 第三层：点击申请 → 管理员在 /admin 批准 → 私聊通知玩家 → 可点「生成提示码」
+ └─ 生成后拿到 5 位码
 → 私聊汐月 /submit 0x<码> → 兑换提示（一次性，用完即焚）
 ```
 
 **码的规则**：无时间限制 ｜ 只认本人（归属校验）｜ 已使用不可再生成 ｜ **发到群聊立即吊销**（插件检测，第三层退回重新申请）。
-
-**解密卡短语表（GM 备查，勿外传）**：
-
-| 关卡 | 第一层 (ROT13) | 第二层 (Base64) | 第三层 (XOR⊕zeta) |
-|------|---------------|-----------------|-------------------|
-| 1 | view | source | comment |
-| 2 | robot | secret | base64 |
-| 3 | apery | basel | riemann |
-| 4 | pixel | text | stego |
-| 5 | memory | vault | lock |
-| 6 | pi | feynman | nine |
-| 7 | pass | token | trust |
-| 8 | sign | footer | corner |
 
 ## 每关提示全文（按玩家模板，`{...}` 为个人参数）
 
