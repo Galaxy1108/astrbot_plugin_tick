@@ -209,7 +209,7 @@ def secret_text(kind: str, p: dict) -> str:
                 f"后面两个，苏桁说存在服务器上一个叫 vault 的页面里——那是他的保险库。")
     if kind == "egg":
         return (f"「{FLAG_INNER}」——这串十六进制，是苏桁一句四字真心话的摘要。"
-                f"猜出那四个字，去 /hidden?phrase=你猜到的四个字 认领。")
+                f"猜出那四个字，去 /hidden?key=你猜到的四个字 认领。")
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
@@ -1080,13 +1080,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._send(page("vault · 保险库", body).encode())
 
     def _handle_hidden(self, qs):
-        phrase = qs.get("phrase", [""])[0].strip()
+        key = qs.get("key", qs.get("phrase", [""]))[0].strip()
         player = self._player_from(qs) or self._cookie_player()
         if not player or player not in STATE["players"]:
             return self._send(
                 page("隐藏结局", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode()
             )
-        if hashlib.md5(phrase.encode("utf-8")).hexdigest() != FLAG_INNER:
+        if not key:
+            body = f"""<div class="box"><p class="frag">访问码</p>
+<p>密码是苏桁的一句真心话——四个字。</p>
+<p style="font-size:12px;color:#6b7683">也可以在地址栏直接访问 /hidden?key=&lt;四个字&gt;</p>
+<form method="get"><input type="text" name="key" placeholder="四个字" style="width:200px"><button>验证</button></form>
+</div>"""
+            return self._send(page("隐藏结局", body).encode())
+        if hashlib.md5(key.encode("utf-8")).hexdigest() != FLAG_INNER:
             return self._send(
                 page("隐藏结局", "<div class='box'><p class='err'>❌ 不是这句话。</p><p>四个字，再想想。</p></div>").encode()
             )
