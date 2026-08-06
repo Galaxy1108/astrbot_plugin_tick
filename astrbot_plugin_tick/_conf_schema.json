@@ -5,12 +5,17 @@
     "web_base": {
       "type": "string",
       "default": "http://127.0.0.1:8080",
-      "description": "对钩计划网页服务器地址（插件与网页同机时保持默认）"
+      "description": "ζ 计划网页服务器地址（插件与网页同机时保持默认）"
     },
     "admin_token": {
       "type": "string",
       "default": "tick-admin-9c4f2b7a1d",
       "description": "与网页服务器相同的管理口令（tick.py 的 TICK_ADMIN_TOKEN），请改成你自己的"
+    },
+    "notify_group": {
+      "type": "string",
+      "default": "",
+      "description": "通关播报推送的群号。留空则推送到最近活跃的任意群；填群号则只推送到该群"
     }
   }
 }

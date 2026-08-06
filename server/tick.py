@@ -22,6 +22,7 @@
     /api/stats            插件/管理员导出全部进度（secret 鉴权）
 """
 import hashlib
+import hmac
 import http.server
 import json
 import os
@@ -39,6 +40,8 @@ DATA_DIR = BASE_DIR / "data"
 
 ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
+
+CODE_TTL = 600  # 实时码从生成起 10 分钟有效
 
 FINAL_KEY = "66b2cac256907ada4f1e9999088883d2"
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
@@ -66,6 +69,31 @@ STAGE_ANSWERS = {
     7: "0888",
     8: "83d2",
 }
+
+STAGE_HINTS = {
+    1: "右键查看 /zeta 页面的网页源代码，注意 HTML 注释：36 36 62 32，是十六进制，转成 ASCII。",
+    2: "看 /robots.txt，找到 /secret，那里有一串 base64，解码就是碎片 2。",
+    3: "ζ(3)（阿培里常数）= 1.20205690315959…。用 WolframAlpha 搜 zeta(3)，或 sympy/mpmath，取小数点后第 5~8 位。",
+    4: "下载「ζ 草图.png」，用文本编辑器打开，搜索 7ada。PNG 的 tEXt 信息块里有东西。",
+    5: "这是汐月自己的秘密，私聊发送 /记忆库（需要先完成前 4 关）。",
+    6: "费曼点：π 的小数展开里第一次连续出现 6 个 9 的地方。网上有 π 数字检索工具，找到那 6 个 9，取前 4 个。",
+    7: "口令在汐月这里，私聊发送 /凭证（需要先完成前 6 关）。",
+    8: "每一页的右下角都有一个小签名，把它的内容填进 /final 页。",
+}
+
+SECRET_TEXTS = {
+    "mem": "记忆库……（信号很不稳定）我只记得四个字符：4、F、1、E。对，4f1e。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。",
+    "cred": "……凭证核对中。校验通过。碎片七：0888。拿去吧，别说是我给的。",
+    "egg": "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER,
+}
+
+SECRET_GATES = {"mem": 4, "cred": 6, "egg": None}  # 需要完成的关卡数
+
+
+def hint_code(player: str, channel: str, ts: int) -> str:
+    """每人、每通道、每次发放唯一的实时十六进制码，从 ts 生成起 CODE_TTL 秒有效。"""
+    msg = f"{player}|{channel}|{ts}".encode()
+    return hmac.new(ADMIN_TOKEN.encode(), msg, hashlib.sha256).hexdigest()[:16]
 
 NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
 
@@ -138,7 +166,7 @@ def stage_intro(n, title):
         f"碎片 {n} · {title}",
         f"""<div class="box"><p class="frag">你正在寻找碎片 {n}。</p>
 <p>把答案填到下方输入框确认，答对会出现绿色的对钩 ✅。</p>
-<p style="font-size:13px;color:#6b7683">卡住了？提示走私聊：汐月那边发送 <code>/hint {n}</code>（需先绑定，见 <a href="/join">/join</a>）。</p></div>""",
+<p style="font-size:13px;color:#6b7683">卡住了？私聊汐月 <code>/hint {n}</code> 领<b>一次性</b>提示（需通关前一关；未绑定先看 <a href="/join">/join</a>）。</p></div>""",
         check_stage=n,
     )
 
@@ -269,7 +297,10 @@ def new_player():
                 "name": None,
                 "stages": {},
                 "final": False,
+                "final_ts": None,
                 "egg": False,
+                "egg_ts": None,
+                "used": {},
                 "last": int(time.time()),
             }
             save_state()
@@ -366,6 +397,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/egg":
             return self._handle_api_egg(qs)
 
+        if path == "/api/hint":
+            return self._handle_api_hint(qs)
+
+        if path == "/api/secret":
+            return self._handle_api_secret(qs)
+
+        if path == "/api/decode":
+            return self._handle_api_decode(qs)
+
+        if path == "/api/finished":
+            return self._handle_api_finished(qs)
+
         self._send(b"404 Not Found", "text/plain", 404)
 
     def _handle_join(self, qs):
@@ -387,7 +430,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <ol>
 <li>回到群里，@汐月 发送 <code>/bind {code}</code>（绑定你的 QQ 身份）；</li>
 <li><b>私聊</b>汐月，发送 <code>/zeta</code> 查看玩法说明；</li>
-<li>卡关时私聊汐月 <code>/hint N</code> 要提示（每关提示需要通关前一关）。</li>
+<li>卡关时私聊汐月 <code>/hint N</code> 领<b>一次性</b>提示（需通关前一关，每关只能看一次，附专属实时码）。</li>
 </ol>
 {extra}
 <p style="color:#6b7683">绑定码丢失？再访问 /join 输入绑定码即可恢复。</p>
@@ -415,7 +458,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if ans != STAGE_ANSWERS[stage]:
             pre = f"（需先完成第 {stage-1} 关）" if stage > 1 else "（无需前置关卡）"
             return self._send(
-                f"<span class='err'>❌ 不对哦。</span> 卡住了？提示走私聊：汐月那边发送 <code>/hint {stage}</code>{pre}。",
+                f"<span class='err'>❌ 不对哦。</span> 卡住了？私聊汐月 <code>/hint {stage}</code> 领一次性提示{pre}。",
                 "text/html; charset=utf-8",
             )
         with LOCK:
@@ -442,6 +485,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if player and player in STATE["players"]:
                     p = STATE["players"][player]
                     p["final"] = True
+                    p["final_ts"] = int(time.time())
                     p["last"] = int(time.time())
                     note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
                     save_state()
@@ -477,6 +521,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with LOCK:
             p = STATE["players"][player]
             p["egg"] = True
+            p["egg_ts"] = int(time.time())
             p["last"] = int(time.time())
             save_state()
         body = f"""<div class="box"><p class="ok">✅ 你找到了那句真心话。</p>
@@ -489,6 +534,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_admin(self, qs):
         if qs.get("pass", [""])[0] != ADMIN_TOKEN:
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
+        decode_html = ""
+        if qs.get("code", [""])[0]:
+            import urllib.request
+            code = qs.get("code", [""])[0].strip().lower()
+            req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/decode?code={urllib.parse.quote(code)}&secret={ADMIN_TOKEN}")
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode())
+            except Exception:
+                data = {"hits": []}
+            if data.get("hits"):
+                rows = "".join(
+                    f"<tr><td>{h['player']}</td><td>{h['qq'] or '—'}</td><td>{h['channel']}</td>"
+                    f"<td>{h['time']}</td><td class='{"done" if h.get("valid") else "todo"}'>{"有效" if h.get("valid") else "已过期"}</td></tr>"
+                    for h in data["hits"]
+                )
+                decode_html = f"""<div class="box"><p class="ok">实时码 {code} 匹配到：</p>
+<table><tr><th>绑定码</th><th>QQ</th><th>内容</th><th>时间</th><th>状态</th></tr>{rows}</table></div>"""
+            else:
+                decode_html = f"<div class='box'><p class='err'>实时码 {code} 无匹配。</p></div>"
         with LOCK:
             rows = sorted(STATE["players"].items(), key=lambda kv: kv[1]["last"], reverse=True)
         lines = []
@@ -498,19 +563,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"<td class='{"done" if p["stages"].get(str(i)) else "todo"}'>{"✓" if p["stages"].get(str(i)) else "·"}</td>"
                 for i in range(1, 9)
             )
+            used = " ".join(sorted(p.get("used") or {})) or "—"
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
                 f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
+                f"<td style='font-size:11px'>{used}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td></tr>"
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
                 + "".join(f"<th>{i}</th>" for i in range(1, 9))
-                + "<th>终局</th><th>彩蛋</th><th>最后活跃</th></tr>")
+                + "<th>终局</th><th>彩蛋</th><th>已用提示</th><th>最后活跃</th></tr>")
         body = f"""<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关终局：{sum(1 for _, p in rows if p['final'])} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
+<p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 16 位实时码，定位是哪个玩家、哪条内容、什么时间。</p>
+<form method="get"><input type="hidden" name="pass" value="{ADMIN_TOKEN}">
+<input type="text" name="code" placeholder="16 位实时码" style="width:220px">
+<button>解码</button></form></div>
+{decode_html}
+<div class="box">
 <table>{head}{''.join(lines)}</table>
-<p style="font-size:12px;color:#6b7683">API: /api/stats?secret=…</p>
+<p style="font-size:12px;color:#6b7683">API: /api/stats?secret=… ｜ /api/decode?code=…&secret=…</p>
 </div>"""
         return self._send(page("进度面板 · GM", body).encode())
 
@@ -532,6 +605,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "stages": [int(s) for s in p["stages"] if p["stages"][s]],
                 "final": p["final"],
                 "egg": p.get("egg", False),
+                "used": sorted((p.get("used") or {}).keys()),
             })
 
     def _handle_api_bind(self, qs):
@@ -553,6 +627,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_state()
             return self._json({"ok": True})
 
+    def _handle_api_finished(self, qs):
+        """供插件轮询：返回 after 之后完成终局的玩家。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        try:
+            after = int(qs.get("after", ["0"])[0])
+        except ValueError:
+            after = 0
+        with LOCK:
+            finished = [
+                {
+                    "player": player,
+                    "qq": p.get("qq"),
+                    "name": p.get("name"),
+                    "created": p.get("created", 0),
+                    "final_ts": p["final_ts"],
+                    "egg": p.get("egg", False),
+                }
+                for player, p in STATE["players"].items()
+                if p.get("final_ts") and p["final_ts"] > after
+            ]
+        finished.sort(key=lambda e: e["final_ts"])
+        return self._json({"ok": True, "finished": finished})
+
     def _handle_api_stats(self, qs):
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
             return self._json({"ok": False, "err": "bad secret"}, 403)
@@ -571,6 +669,85 @@ class Handler(http.server.BaseHTTPRequestHandler):
             p["last"] = int(time.time())
             save_state()
             return self._json({"ok": True})
+
+    def _consume(self, player: str, p: dict, channel: str, text: str) -> dict:
+        """一次性发放：同一通道只能领取一次，返回内容 + 专属实时码（自生成起 10 分钟有效）。"""
+        used = p.setdefault("used", {})
+        if channel in used:
+            return {"ok": True, "status": "consumed"}
+        ts = int(time.time())
+        used[channel] = ts
+        p["last"] = ts
+        save_state()
+        return {
+            "ok": True,
+            "status": "ok",
+            "text": text,
+            "code": hint_code(player, channel, ts),
+            "ttl": CODE_TTL,
+        }
+
+    def _handle_api_hint(self, qs):
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        try:
+            stage = int(qs.get("stage", ["0"])[0])
+        except ValueError:
+            return self._json({"ok": False, "err": "bad stage"})
+        if stage not in STAGE_HINTS:
+            return self._json({"ok": False, "err": "bad stage"})
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            _, mx = player_progress(p)
+            if stage - 1 > mx:
+                return self._json({"ok": True, "status": "gated", "need": stage - 1})
+            ret = self._consume(player, p, f"h{stage}", STAGE_HINTS[stage])
+            ret["stage"] = stage
+            return self._json(ret)
+
+    def _handle_api_secret(self, qs):
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        channel = qs.get("channel", [""])[0].strip()
+        if channel not in SECRET_TEXTS:
+            return self._json({"ok": False, "err": "bad channel"})
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            need = SECRET_GATES[channel]
+            if need is not None:
+                _, mx = player_progress(p)
+                if mx < need:
+                    return self._json({"ok": True, "status": "gated", "need": need})
+            return self._json(self._consume(player, p, channel, SECRET_TEXTS[channel]))
+
+    def _handle_api_decode(self, qs):
+        """GM 泄密追溯：输入实时码，反查是哪个玩家的哪条内容，并标注是否仍有效。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        code = qs.get("code", [""])[0].strip().lower()
+        if len(code) != 16:
+            return self._json({"ok": False, "err": "bad code"})
+        now = int(time.time())
+        hits = []
+        with LOCK:
+            for player, p in STATE["players"].items():
+                for channel, ts in (p.get("used") or {}).items():
+                    msg = f"{player}|{channel}|{ts}".encode()
+                    if hmac.new(ADMIN_TOKEN.encode(), msg, hashlib.sha256).hexdigest()[:16] == code:
+                        hits.append({
+                            "player": player,
+                            "qq": p.get("qq"),
+                            "channel": channel,
+                            "time": time.strftime("%m-%d %H:%M", time.localtime(ts)),
+                            "valid": (now - ts) <= CODE_TTL,
+                        })
+        return self._json({"ok": True, "hits": hits})
 
 
 def main():
