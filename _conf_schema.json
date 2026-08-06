@@ -13,5 +13,10 @@
     "type": "string",
     "default": "",
     "description": "播报目标：填群号 → 推送到该群；填你的 QQ 号 → 推送到你的私聊（自测用）。留空则推送到最近活跃的任意群"
+  },
+  "public_base": {
+    "type": "string",
+    "default": "http://47.103.66.93:8080",
+    "description": "玩家访问的公网入口（/zeta 指令给玩家看的网址）"
   }
 }

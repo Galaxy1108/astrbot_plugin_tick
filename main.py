@@ -169,16 +169,11 @@ class Main(Star):
         code = await self._bound_code(event)
         if code:
             await self.put_kv_data(f"tick_umo_{code}", event.unified_msg_origin)
+        base = str(self.config.get("public_base", "http://47.103.66.93:8080")).rstrip("/")
         yield event.plain_result(
-            "汐月：你想知道苏桁的事？先按顺序来：\n"
-            "1. 在群里 @我，发送 /bind <绑定码>（绑定码去网页 /join 领取）；\n"
-            "2. 从群里管理员给的网址开始解谜；\n"
-            "3. 每关页面的「专属提示码」区到时间/审批通过后点「生成提示码」，私聊我 /submit 0x<码> 兑换"
-            "（提示、记忆库、彩蛋都走这一个指令；码无时间限制、用完即焚、只认本人）；\n"
-            "4. 第 1 层等 5 分钟、第 2 层等 20 分钟解锁，第 3 层申请后由管理员审批；\n"
-            "5. 最后一关没有网页线索——最后一个数字只有我（汐月）知道。私聊我，用真心或证据打动我；\n"
-            "6. /进度 查看自己的通关进度。\n"
-            "苏桁说，秘密只能一对一地说，说了就没了。"
+            "苏桁啊……他研究黎曼 ζ 函数，后来突然不见了。\n"
+            f"他的网站还开着：{base}/zeta\n"
+            "谜题都在那里。我会在群里等你们的好消息。"
         )
 
     @filter.command("submit", alias={"提交", "兑换"})
@@ -317,28 +312,6 @@ class Main(Star):
         ret = await self._api("/api/revoke", {"code": code})
         if ret and ret.get("found"):
             yield event.plain_result("……这个码已经作废了。发到群里，它就死了。回网页重新生成吧（第三层需要重新申请）。")
-
-    # ---------- 群内剧情对话（不含任何答案/提示） ----------
-
-    @filter.regex(r"苏桁|ζ|黎曼")
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
-    async def lore(self, event: AstrMessageEvent):
-        self._remember_group(event)
-        yield event.plain_result(
-            "（沉默了一会儿）苏桁……他已经很久没回来了。"
-            "他研究黎曼 ζ 函数——那个连 1+2+3+… 都等于 -1/12 的世界。"
-            "他临走前说，如果有一天他不在了，就让大家去他的网站上看看。"
-            "细节……有些事只能一对一地说。他的网站还开着，地址你问群里的管理员吧。"
-        )
-
-    @filter.regex(r"网站|网址|入口")
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
-    async def site(self, event: AstrMessageEvent):
-        self._remember_group(event)
-        yield event.plain_result(
-            "他的网站还开着……地址我记不清了，你去问群里的管理员吧。"
-            "拿到绑定码之后记得私聊我，发送 /zeta 看玩法。"
-        )
 
     # ---------- 通关/进度播报（轮询网页 /api/events） ----------
 
