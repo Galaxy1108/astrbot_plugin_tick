@@ -417,14 +417,20 @@ def issue_code(p: dict, kind: str, stage: int, level: int | None) -> str:
 
 
 def code_line(p: dict, kind: str, stage: int, level: int | None, gen_url: str) -> str:
-    """渲染一枚码的状态：未生成→按钮；已生成→显示；已用/已吊销→提示。"""
+    """渲染一枚码的状态：优先未用未吊销；其次已吊销→重新生成；已用→不可再生。"""
+    fallback = None  # 已吊销/已用的旧码
     for code, e in p.setdefault("hintcodes", {}).items():
-        if (e["kind"], e.get("stage"), e.get("level")) == (kind, stage, level):
-            if e.get("used"):
-                return f"<code>/submit 0x{code}</code>（已使用）"
-            if e.get("revoked"):
-                return f"<span style='color:#ff6b6b'>已吊销</span> <a href='{gen_url}'>重新生成</a>"
+        if (e["kind"], e.get("stage"), e.get("level")) != (kind, stage, level):
+            continue
+        if not e.get("used") and not e.get("revoked"):
             return f"<code>/submit 0x{code}</code>"
+        if fallback is None:
+            fallback = (code, e)
+    if fallback:
+        code, e = fallback
+        if e.get("revoked"):
+            return f"<span style='color:#ff6b6b'>已吊销</span> <a href='{gen_url}'>重新生成</a>"
+        return f"<code>/submit 0x{code}</code>（已使用）"
     return f"<a href='{gen_url}'>点击生成提示码</a>"
 
 
