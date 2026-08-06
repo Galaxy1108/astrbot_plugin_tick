@@ -1476,7 +1476,7 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                                        "stage": int(st), "ts": ts})
                 if p.get("final_ts") and p["final_ts"] >= after:
                     events.append({"type": "final", "player": player, "qq": qq, "name": name,
-                                   "created": p.get("created", 0), "final_ts": p["final_ts"],
+                                   "created": (p.get("created", 0) or 0) * 1000, "final_ts": p["final_ts"],
                                    "egg": p.get("egg", False), "ts": p["final_ts"]})
                 if p.get("egg_ts") and p["egg_ts"] >= after:
                     events.append({"type": "egg", "player": player, "qq": qq, "name": name,
