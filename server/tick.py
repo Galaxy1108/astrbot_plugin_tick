@@ -1307,6 +1307,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
                 f"<td>{count}/8</td>{cells}"
+                f"<td class='{"done" if p.get("fake") else "todo"}'>{"✓" if p.get("fake") else "·"}</td>"
                 f"<td class='{"done" if p.get("frag8_found") else "todo"}'>{"✓" if p.get("frag8_found") else "·"}</td>"
                 f"<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
@@ -1318,7 +1319,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
                 + "".join(f"<th>{i}</th>" for i in range(1, 8))
-                + "<th>8</th><th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
+                + "<th>伪</th><th>8</th><th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
         body = f"""{flash}{pending_html}<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关真结局：{sum(1 for _, p in rows if p['final'])} ｜ 到达假结局：{sum(1 for _, p in rows if p.get('fake'))} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 5 位一次性码，定位是哪个玩家、哪条内容、什么时间。</p>
