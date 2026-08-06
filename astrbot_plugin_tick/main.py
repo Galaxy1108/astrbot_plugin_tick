@@ -147,6 +147,9 @@ class Main(Star):
     @filter.command("hint", alias={"提示"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def hint_cmd(self, event: AstrMessageEvent, stage: int):
+        if not event.is_private_chat():
+            yield event.plain_result("这里说不出口。去私聊我。")
+            return
         if stage < 1 or stage > 8:
             yield event.plain_result("关卡号是 1 到 8。")
             return
@@ -165,6 +168,9 @@ class Main(Star):
     @filter.command("记忆库", alias={"frag5"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def memory_cmd(self, event: AstrMessageEvent):
+        if not event.is_private_chat():
+            yield event.plain_result("记忆库的事……只能在私聊里说。")
+            return
         ret, err = await self._call(event, "/api/secret", {"channel": "mem"})
         if err:
             yield event.plain_result(err)
@@ -180,6 +186,9 @@ class Main(Star):
     @filter.command("凭证", alias={"frag7"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def credential_cmd(self, event: AstrMessageEvent):
+        if not event.is_private_chat():
+            yield event.plain_result("口令不能在群里喊。私聊我。")
+            return
         ret, err = await self._call(event, "/api/secret", {"channel": "cred"})
         if err:
             yield event.plain_result(err)
@@ -195,6 +204,9 @@ class Main(Star):
     @filter.command("彩蛋", alias={"hidden"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def egg_cmd(self, event: AstrMessageEvent, phrase: str):
+        if not event.is_private_chat():
+            yield event.plain_result("那封信……只能在私聊里读。")
+            return
         if hashlib.md5(phrase.strip().encode("utf-8")).hexdigest() != FLAG_INNER:
             yield event.plain_result("……不是这句话。四个字，再想想。")
             return
@@ -210,6 +222,9 @@ class Main(Star):
     @filter.command("进度", alias={"progress"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def progress_cmd(self, event: AstrMessageEvent):
+        if not event.is_private_chat():
+            yield event.plain_result("你的进度，私聊里才能看。")
+            return
         ret, err = await self._call(event, "/api/progress", {})
         if err:
             yield event.plain_result(err)
@@ -237,6 +252,17 @@ class Main(Star):
             yield event.plain_result(f"绑定成功！{name}（{qq}）→ 绑定码 {code}。私聊我发送 /zeta 开始。")
         else:
             yield event.plain_result("绑定失败：这个绑定码不存在。先去网页 /join 领取绑定码，再回来绑定。")
+
+    # ---------- 群内拦截：敏感指令在群里一律无效（不消耗任何一次性凭证） ----------
+
+    @filter.regex(r"^(记忆库|凭证|彩蛋|hint|提示|进度|zeta|tick)\b")
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    async def group_block(self, event: AstrMessageEvent):
+        self._remember_group(event)
+        yield event.plain_result(
+            "这些指令只能在私聊里使用，在群里说了是无效的（也不会消耗你的次数）。"
+            "想聊剧情的话，随时可以 @我。"
+        )
 
     # ---------- 群内剧情对话（不含任何答案/提示） ----------
 
