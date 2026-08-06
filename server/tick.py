@@ -1021,11 +1021,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p style="font-size:12px;color:#6b7683">也可以在地址栏直接访问 /final?key=&lt;访问码&gt;</p>
 {err}
 <form method="get"><input type="text" name="key" placeholder="例如 66b2cac2…" style="width:300px"><button>验证</button></form>
-<p style="font-size:12px;color:#6b7683">拿到第 8 块碎片后，8 块一起拼接验证。</p></div>
-<div class="box"><p class="frag">你正在寻找碎片 8。</p>
+</div>
+<div class="box">
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p>
-<p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>"""
-        return self._send(page("碎片 8 · 真相", body + self._hint_box(8, player), check_stage=8).encode())
+<p style="font-size:12px;color:#6b7683">卡住了？下方「专属提示码」可以换提示（一次性）。</p></div>"""
+        return self._send(page("终局", body + self._hint_box(8, player)).encode())
 
     def _handle_vault(self, qs):
         """第 5 关保险库：便签 = md5(碎片5)，玩家枚举后两位撞库。"""

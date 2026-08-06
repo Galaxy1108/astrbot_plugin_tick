@@ -37,7 +37,7 @@ class VerifyFragmentsTool(FunctionTool[AstrAgentContext]):
     name: str = "verify_fragments"
     description: str = (
         "核对该玩家声称收集到的 ζ 计划碎片。把玩家说出的碎片列表传进来，"
-        "返回其中正确的数量（至少 3 个才算真的走完了前七关）。"
+        "返回其中正确的数量（至少 3 个才算真的走完了前面的路）。"
     )
     parameters: dict = Field(
         default_factory=lambda: {
