@@ -38,7 +38,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 | 关 | 玩法（按玩家个性化） | 载体 | 入口 |
 |----|------|------|------|
-| 1 | 查看首页源码：HTML 注释里的十六进制 = 你的碎片 1 的 ASCII 字节 | `/zeta` 注释 | `/zeta` |
+| 1 | 查看首页源码：HTML 注释里的十六进制 = 你的碎片 1 的 ASCII 字节 | `/` 注释 | `/` |
 | 2 | `robots.txt` 指向 `/secret`：页面上的一串 base64 = 你的碎片 2 | base64 | `/robots.txt` |
 | 3 | ζ(3) 小数：起始位由碎片 1 推导（N = 碎片1的十六进制 mod 20 + 1），取第 N~N+3 位 | `/stage3` |
 | 4 | ζ 草图有 8 个编号 tEXt 块（t1~t8），你的碎片在页面指定的编号块里 | strings/文本编辑器 | `/static/zeta.png` |
@@ -177,7 +177,7 @@ $env:TICK_ADMIN_TOKEN="你的新口令"; pm2 restart tick-arg --update-env
 ```
 
 **防火墙**：Windows 防火墙放行 8080 + 阿里云安全组入方向 TCP 8080。
-入口：`http://<公网IP>:8080/zeta`
+入口：`http://<公网IP>:8080/`（首页即第 1 关，`/zeta` 已废弃）
 
 ## 部署后必须做
 

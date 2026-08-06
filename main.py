@@ -172,7 +172,7 @@ class Main(Star):
         base = str(self.config.get("public_base", "http://47.103.66.93:8080")).rstrip("/")
         yield event.plain_result(
             "苏桁啊……他研究黎曼 ζ 函数，后来突然不见了。\n"
-            f"他的网站还开着：{base}/zeta\n"
+            f"他的网站还开着：{base}/\n"
             "谜题都在那里。我会在群里等你们的好消息。"
         )
 

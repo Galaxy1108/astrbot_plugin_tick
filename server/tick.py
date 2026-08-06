@@ -16,7 +16,7 @@
     后台 /admin 输入泄露的码可定位泄密者。
 
 路由:
-    /zeta /secret /stage3~7   关卡页（含玩家专属提示码）
+    /（首页=第1关） /secret /stage3~7   关卡页（含玩家专属提示码）；/zeta 已废弃
     /join                 领取/恢复绑定码（写 cookie tick_player）
     /check                校验答案并记录进度
     /final                终局（成功页签发彩蛋码）
@@ -181,7 +181,7 @@ def secret_text(kind: str, p: dict) -> str:
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
-STAGE_PATHS = {1: "/zeta", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
+STAGE_PATHS = {1: "/", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
 
 PAGE_CSS = """
 body { background:#0e1116; color:#d7dde4; font-family:"Microsoft YaHei",system-ui,sans-serif;
@@ -549,7 +549,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         if path in ("/", "/index.html"):
-            return self._send(b'<meta http-equiv="refresh" content="0;url=/zeta">')
+            g = self._stage_gate(1)
+            if g is not None:
+                return self._send(self._locked_page(1, g).encode())
+            return self._send(self._stage_page(1).encode())
+        if path == "/zeta":
+            return self._redirect("/")
 
         if path == "/robots.txt":
             return self._send(
@@ -581,11 +586,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/generate":
             return self._handle_generate(qs)
 
-        if path == "/zeta":
-            g = self._stage_gate(1)
-            if g is not None:
-                return self._send(self._locked_page(1, g).encode())
-            return self._send(self._stage_page(1).encode())
+
         if path == "/stage2":
             g = self._stage_gate(2)
             if g is not None:
@@ -736,7 +737,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 {extra}
 <p style="color:#6b7683">不小心又进了 /join？没关系——身份不会重置，这里始终显示你原来的绑定码和进度。换设备/清 cookie 后，回 /join 输入绑定码即可恢复；绑定码彻底忘了就私聊汐月发送 <code>/找回</code>。</p>
 </div>
-<a href="/zeta" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(
             page("玩家中心", body).encode(),
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
@@ -972,7 +973,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>苏桁写的一封信，收件人是汐月：</p>
 <pre>{HIDDEN_LETTER}</pre>
 <p style="color:#6b7683">—— 隐藏结局 · 解锁</p></div>
-<a href="/zeta" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(page("隐藏结局 · 苏桁的信", body).encode())
 
     def _handle_admin(self, qs):
@@ -1410,7 +1411,7 @@ def main():
     if not (STATIC_DIR / "zeta.png").exists():
         print(f"[警告] 缺少 {STATIC_DIR / 'zeta.png'}，请先运行 make_assets.py")
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
-        print(f"[ζ 计划] http://0.0.0.0:{PORT}/zeta  后台面板 /admin?pass=<ADMIN_TOKEN>")
+        print(f"[ζ 计划] http://0.0.0.0:{PORT}/  后台面板 /admin?pass=<ADMIN_TOKEN>")
         httpd.serve_forever()
 
 
