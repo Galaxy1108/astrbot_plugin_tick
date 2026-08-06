@@ -238,8 +238,8 @@ footer { margin-top:60px; border-top:1px solid #222a33; padding-top:14px; font-s
 """
 
 
-def page(title, body, check_stage=None):
-    """渲染一个带统一头尾的页面。"""
+def page(title, body, check_stage=None, footer_extra=""):
+    """渲染一个带统一头尾的页面；footer_extra 追加到页脚（小字，仅指定页显示）。"""
     check_html = ""
     if check_stage:
         check_html = f"""
@@ -255,6 +255,10 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
   fetch('/check?stage={check_stage}&ans='+encodeURIComponent(v)+'&player='+getPlayer()).then(r=>r.text()).then(t=>{{
     document.getElementById('r').innerHTML=t;}});}}
 </script>"""
+    footer_html = "<footer>苏桁 · ζ(s) = Σ 1/nˢ"
+    if footer_extra:
+        footer_html += f" ｜ <span style='font-size:11px;color:#39424e'>{footer_extra}</span>"
+    footer_html += "</footer>"
     return f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -264,7 +268,7 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
 <div class="banner" id="banner" style="display:none">还没领取绑定码？<a href="/join">先去 /join 领取</a>，不然进度和提示都拿不到。</div>
 {body}
 {check_html}
-<footer>苏桁 · ζ(s) = Σ 1/nˢ</footer>
+{footer_html}
 <script>
 if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').style.display='';}}
 </script>
@@ -347,8 +351,6 @@ def stage_body(p: dict, stage: int) -> str:
 <div class="box">
 <p>录音里藏着一段四位数。</p>
 <p>……不对，好像还差了一点。</p>
-<p style="color:#6b7683">便签角落有一行小字：</p>
-<pre>1842 ＋ 偏移 3 → 4175（每一位相加，超过 9 就减 10）</pre>
 </div>
 """
 
@@ -785,13 +787,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _stage_page(self, stage: int):
         player = self._cookie_player()
         body = ""
+        footer_extra = ""
         with LOCK:
             p = STATE["players"].get(player)
             if p:
                 ensure_frags(p)
                 save_state()
                 body = stage_body(p, stage)
-        return page(f"碎片 {stage}", body + self._hint_box(stage, player), check_stage=stage)
+        if stage == 7:
+            footer_extra = "1842 ＋ 偏移 3 → 4175（每一位相加，超过 9 就减 10）"
+        return page(f"碎片 {stage}", body + self._hint_box(stage, player), check_stage=stage, footer_extra=footer_extra)
 
     def _handle_join(self, qs):
         code = qs.get("code", [""])[0].strip().lower()
