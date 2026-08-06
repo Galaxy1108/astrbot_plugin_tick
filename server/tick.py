@@ -176,8 +176,8 @@ def render_hint(p: dict, stage: int, level: int) -> str:
         ][level]
     return [
         "网页上没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。",
-        "直接要她不会给。证明自己：在私聊里准确说出你收集到的几个碎片编号（她会用工具核对），或者认真说一句心里话。",
-        "在私聊里报出你记得的三四个碎片编号，再真诚地说一句心里话。她心里藏着的那串数字，会亲口念给你。",
+        "直接要她不会给。证明自己：在私聊里告诉她你在服务器上拿到的那个 flag（flag{…}，她会核对）。",
+        "在私聊里报出你在 /final 拿到的 flag{…}（核对通过后），再真诚地说一句心里话。她心里藏着的那串数字，会亲口念给你。",
     ][level]
 
 SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
@@ -712,6 +712,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/verify":
             return self._handle_api_verify(qs)
 
+        if path == "/api/verify_flag":
+            return self._handle_api_verify_flag(qs)
+
         if path == "/api/stats":
             return self._handle_api_stats(qs)
 
@@ -1008,18 +1011,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 p["fake_ts"] = now
                 p["last"] = now
                 save_state()
-                fake_body = f"""<div class="box"><h2 style="margin-top:0">对钩……？</h2>
+                fake_body = f"""<div class="box">
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FAKE_FLAG}</pre>
-<p style="color:#6b7683">「……？」 —— 苏桁</p></div>
-<div class="box"><p class="err">……感觉哪里不太对。</p>
-<p>像是缺了什么。真正的答案，好像从来都不在网页上。</p>
-<p>苏桁的 AI 还活着。也许，该去问问她。</p></div>"""
+</div>
+<div class="box"><p class="err">……感觉哪里不太对。</p></div>"""
         if true_body is not None:
             return self._send(page("真结局", true_body).encode())
         if fake_body is not None:
             # 提示区在锁外渲染，避免与 _hint_box 死锁
-            return self._send(page("对钩……？", fake_body + self._hint_box(8, player)).encode())
+            return self._send(page("终局", fake_body).encode())
         err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
         body = f"""<div class="box"><p class="frag">访问码</p>
 <p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
@@ -1495,6 +1496,13 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 STATE["notify_last"] = events[-1]["ts"] + 1
                 save_state()
         return self._json({"ok": True, "events": events})
+
+    def _handle_api_verify_flag(self, qs):
+        """套话验证：核对玩家声称在服务器上拿到的 flag（= 假结局那个）。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        flag = qs.get("flag", [""])[0].strip()
+        return self._json({"ok": True, "match": flag == FAKE_FLAG})
 
     def _handle_api_stats(self, qs):
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
