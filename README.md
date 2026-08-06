@@ -1,4 +1,4 @@
-# 对钩计划 (Project TICK) — ARG
+# ζ 计划 (Project ZETA) — ARG
 
 一个给 OI 选手 / 新手准备的解谜 ARG。目标：收集 8 个十六进制碎片，拼出**访问码**，访问码打开最后一页，换取
 
@@ -8,7 +8,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 > 访问码 ≠ flag：8 个碎片拼出的只是"开锁钥匙"，flag 只在最终页出现。
 
-**背景**：数学系学生苏桁研究对钩函数 f(x)=x+1/x 后失踪。他的 AI「汐月」还在群里照常聊天。玩家通过他的服务器和他留下的谜题，拼出访问码。
+**背景**：数学系学生苏桁研究**黎曼 ζ 函数**与数论——那个连 1+2+3+… 都等于 -1/12 的世界——之后神秘失踪。他的 AI「汐月」还在群里照常聊天。玩家通过他的服务器和他留下的谜题，拼出访问码。
 
 ## 组成
 
@@ -17,7 +17,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 | `astrbot_plugin_tick/` | AstrBot 插件（汐月的剧情回复，可从 GitHub 安装） |
 | `server/tick.py` | ARG 网页服务器（零依赖，Python 标准库） |
 | `server/make_assets.py` | PNG tEXt 隐写注入脚本 |
-| `server/static/tick.png` | 已注入碎片 `85ac` 的对钩函数图 |
+| `server/static/zeta.png` | 已注入碎片 `7ada` 的 ζ 函数草图 |
 
 ## 玩家系统（防剧透）
 
@@ -26,12 +26,12 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 1. 玩家访问网页 `/join` 领取绑定码（写 cookie）；
 2. 玩家在群里 @汐月 发送 `/bind <绑定码>`，绑定 QQ 身份（后台可看到 QQ）；
 3. 玩家私聊汐月使用指令：
-   - `/tick` — 玩法说明
+   - `/zeta` — 玩法说明
    - `/hint N` — 第 N 关提示（必须先通关第 N-1 关）
    - `/记忆库` — 第 5 关碎片（必须先完成前 4 关）
    - `/凭证` — 第 7 关碎片（必须先完成前 6 关）
    - `/进度` — 查看自己的通关进度
-4. 群内只保留剧情对话（苏桁/对钩/网站），不含任何答案。
+4. 群内只保留剧情对话（苏桁/ζ/网站），不含任何答案。
 
 **后台面板**：`/admin?pass=<管理口令>`，可查看每个玩家：绑定码、QQ、昵称、各关 ✓、终局、最后活跃。
 管理口令默认 `tick-admin-9c4f2b7a1d`（务必改掉，见下）。
@@ -40,16 +40,16 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 | 关 | 答案 | 玩法 | 载体 |
 |----|------|------|------|
-| 1 | `66b2` | 查看首页源码，`36 36 62 32` hex→ASCII | `/tick` 注释 |
+| 1 | `66b2` | 查看首页源码，`36 36 62 32` hex→ASCII | `/zeta` 注释 |
 | 2 | `cac2` | `robots.txt` → `/secret` → base64 `Y2FjMg==` | `/robots.txt` `/secret` |
-| 3 | `f48b` | 求和 1..353 再加 122，转十六进制 | `/stage3` |
-| 4 | `7ada` | 下载 PNG，文本/十六进制编辑器搜 `7ada`（tEXt 块） | `/static/tick.png` |
+| 3 | `5690` | ζ(3)（阿培里常数）小数第 5~8 位，WolframAlpha 搜 `zeta(3)` | `/stage3` |
+| 4 | `7ada` | 下载 ζ 草图，文本/十六进制编辑器搜 `7ada`（tEXt 块） | `/static/zeta.png` |
 | 5 | `4f1e` | 私聊汐月 `/记忆库`（需完成前 4 关） | 汐月 |
-| 6 | `6f0e` | 凯撒前移 2：`6h0g` | `/stage6` |
+| 6 | `9999` | 费曼点：π 小数里第一次连续出现 6 个 9，取前 4 个（π 数字检索网站） | `/stage6` |
 | 7 | `0888` | 私聊汐月 `/凭证`（需完成前 6 关） | 汐月 |
 | 8 | `83d2` | 每页右下角小签名 | 所有页面 |
 
-**访问码**：`66b2cac2f48b7ada4f1e6f0e088883d2` → 访问 `/final?key=<访问码>` 得到 flag。
+**访问码**：`66b2cac256907ada4f1e9999088883d2` → 访问 `/final?key=<访问码>` 得到 flag。
 
 ## 隐藏关卡（彩蛋）
 
@@ -62,7 +62,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 验证：`python3 -c "import hashlib; print(hashlib.md5('我喜欢你'.encode()).hexdigest())"` → `81fbaa81762885ac3481fd4b416485e6`
 
-每关页面带答案输入框（`/check` 校验，答对亮对钩 ✅）、`/hint` 提示接口。
+每关页面带答案输入框（`/check` 校验，答对亮绿色对钩 ✅）。
 
 ## 插件安装（AstrBot 管理面板）
 
@@ -96,7 +96,7 @@ $env:TICK_ADMIN_TOKEN="你的新口令"; pm2 restart tick-arg --update-env
 - Windows 防火墙：`netsh advfirewall firewall add rule name="tick-arg" dir=in action=allow protocol=TCP localport=8080`
 - **阿里云安全组：入方向开放 TCP 8080**（这是第二层防火墙，必须在 ECS 控制台操作）
 
-访问入口：`http://<公网IP>:8080/tick`
+访问入口：`http://<公网IP>:8080/zeta`
 
 ## 验证
 
@@ -107,11 +107,11 @@ curl -c cj.txt "http://localhost:8080/join?code=test01"
 curl "http://localhost:8080/api/bind?player=test01&qq=12345&name=Alice&secret=tick-admin-9c4f2b7a1d"
 curl "http://localhost:8080/api/progress?player=test01&secret=tick-admin-9c4f2b7a1d"
 # 3. 每关答案（带 cookie）
-for a in 66b2 cac2 f48b 7ada 4f1e 6f0e 0888 83d2; do
+for a in 66b2 cac2 5690 7ada 4f1e 9999 0888 83d2; do
   curl -b cj.txt "http://localhost:8080/check?stage=N&ans=$a"
 done
 # 4. 终局
-curl -b cj.txt "http://localhost:8080/final?key=66b2cac2f48b7ada4f1e6f0e088883d2"
+curl -b cj.txt "http://localhost:8080/final?key=66b2cac256907ada4f1e9999088883d2"
 # 5. 后台面板
 curl "http://localhost:8080/admin?pass=tick-admin-9c4f2b7a1d"
 ```

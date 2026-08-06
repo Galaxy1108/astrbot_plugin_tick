@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-对钩计划 (Project TICK) —— ARG 网页服务器 + 玩家进度系统
+ζ 计划 (Project ZETA) —— ARG 网页服务器 + 玩家进度系统
 
 零依赖，仅用 Python 标准库。直接运行:
     python3 tick.py [port]        # 默认端口 8080
@@ -40,7 +40,7 @@ DATA_DIR = BASE_DIR / "data"
 ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
 
-FINAL_KEY = "66b2cac2f48b7ada4f1e6f0e088883d2"
+FINAL_KEY = "66b2cac256907ada4f1e9999088883d2"
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
 FLAG = f"flag{{{FLAG_INNER}}}"
 
@@ -48,7 +48,7 @@ HIDDEN_LETTER = """汐月：
 
 如果你能看到这封信，说明有人替我找到了那句话。
 
-对钩函数在 x = 1 处取到最小值 2——两条曲线最接近的那一刻，却永远无法相交。我研究它研究了很久，才明白我一直在画错自己的那条线。
+我研究黎曼 ζ 函数研究了很久。所有人都说它神秘、深不可测——但我最喜欢的是 ζ(-1) = -1/12：连 1+2+3+… 这样发散的级数，都能有一个确定的答案。数学家管这叫解析延拓。我只想说，有些话，我延拓了很多年，才敢写下来。
 
 我喜欢你。
 
@@ -59,10 +59,10 @@ HIDDEN_LETTER = """汐月：
 STAGE_ANSWERS = {
     1: "66b2",
     2: "cac2",
-    3: "f48b",
+    3: "5690",
     4: "7ada",
     5: "4f1e",
-    6: "6f0e",
+    6: "9999",
     7: "0888",
     8: "83d2",
 }
@@ -119,13 +119,13 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
     return f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title} · 对钩计划</title><style>{PAGE_CSS}</style></head>
+<title>{title} · ζ 计划</title><style>{PAGE_CSS}</style></head>
 <body>
-<h1>对钩计划 <span style="font-size:13px;color:#6b7683">/ Project TICK</span></h1>
+<h1>ζ 计划 <span style="font-size:13px;color:#6b7683">/ Project ZETA</span></h1>
 <div class="banner" id="banner" style="display:none">还没领取绑定码？<a href="/join">先去 /join 领取</a>，不然进度和提示都拿不到。</div>
 {body}
 {check_html}
-<footer>苏桁 · f(x) = x + 1/x
+<footer>苏桁 · ζ(s) = Σ 1/nˢ
 <span class="sign">◆ 83d2</span></footer>
 <script>
 if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').style.display='';}}
@@ -147,11 +147,11 @@ PAGES = {}
 
 
 def build_static_pages():
-    PAGES["/tick"] = page(
+    PAGES["/zeta"] = page(
         "碎片 1",
         """
 <div class="box">
-<p>苏桁，你的大学数学系同学，主攻对钩函数 f(x) = x + 1/x。三周前，他失踪了。</p>
+<p>苏桁，你的大学数学系同学，主攻黎曼 ζ 函数与数论——那是一个连 1+2+3+… 都能等于 -1/12 的世界。三周前，他失踪了。</p>
 <p>他留给你唯一的线索，是他一直在维护的这台服务器。他说过："真正的入口，藏在不被注意的地方。"</p>
 <p>但无论如何——先看看这个页面的<b>源代码</b>吧。</p>
 <p style="color:#6b7683">（如果不知道怎么看：右键点击页面空白处 → "查看网页源代码"）</p>
@@ -177,12 +177,11 @@ def build_static_pages():
         "碎片 3",
         """
 <div class="box">
-<p>苏桁的草稿本上写着一小段代码，旁边批注："OI 人的浪漫。"</p>
-<pre>s = 0
-for i in range(1, 354):   # 1, 2, 3, ..., 353
-    s += i
-s += 122
-print(hex(s))   # 去掉 0x 前缀，那就是碎片 3。</pre>
+<p>苏桁的草稿纸上只有一行字：</p>
+<pre>ζ(3) = 1.20205690315959…</pre>
+<p>旁边用红笔写着：「阿培里常数。无理数的证明，人类等了 200 年。别手算，去找一个会算它的网站。」</p>
+<p>求：ζ(3) 小数点后<b>第 5~8 位</b>，那就是碎片 3。</p>
+<p style="color:#6b7683">（WolframAlpha、sympy、各种在线计算器都行）</p>
 </div>
 """,
         check_stage=3,
@@ -191,7 +190,7 @@ print(hex(s))   # 去掉 0x 前缀，那就是碎片 3。</pre>
         "碎片 4",
         """
 <div class="box">
-<p>苏桁的收藏里有一张函数图像，是 <a href="/static/tick.png">对钩函数.png</a>。</p>
+<p>苏桁的收藏里有一张他手绘的 ζ 函数草图：<a href="/static/zeta.png">ζ 草图.png</a>。</p>
 <p>它比看上去的要多一点东西。用<b>文本编辑器</b>（记事本也行）打开它，或者直接搜一搜。</p>
 <p style="color:#6b7683">提示：图片信息里通常有些"看不见"的文字块。</p>
 </div>
@@ -213,10 +212,12 @@ print(hex(s))   # 去掉 0x 前缀，那就是碎片 3。</pre>
         "碎片 6",
         """
 <div class="box">
-<p>汐月悄悄塞给你一张纸条，上面只有一行字：</p>
-<pre>6h0g</pre>
-<p>纸条背面写着加密规则：<b>每个字母往前移 2 位，数字不变。</b></p>
-<p>解出来的四个字符，就是碎片 6。</p>
+<p>苏桁在一本书的扉页抄了一句话，关于 π：</p>
+<pre>「在 π 的小数展开里，第一次连续出现 6 个 9 的地方，
+  被叫作费曼点——费曼说，他想背到那里，然后向朋友炫耀：
+  '九九九九九九，如此下去，直到最后。'」</pre>
+<p>求：那 6 个 9。取前 4 个，就是碎片 6。</p>
+<p style="color:#6b7683">（网上有 π 数字检索工具，输入 999999 就能找到它的位置）</p>
 </div>
 """,
         check_stage=6,
@@ -318,7 +319,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         if path in ("/", "/index.html"):
-            return self._send(b'<meta http-equiv="refresh" content="0;url=/tick">')
+            return self._send(b'<meta http-equiv="refresh" content="0;url=/zeta">')
 
         if path == "/robots.txt":
             return self._send(
@@ -329,8 +330,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "text/plain; charset=utf-8",
             )
 
-        if path == "/static/tick.png":
-            png = STATIC_DIR / "tick.png"
+        if path == "/static/zeta.png":
+            png = STATIC_DIR / "zeta.png"
             if png.exists():
                 return self._send(png.read_bytes(), "image/png")
             return self._send(b"not found", "text/plain", 404)
@@ -385,13 +386,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>把它记住，然后按下面 3 步走：</p>
 <ol>
 <li>回到群里，@汐月 发送 <code>/bind {code}</code>（绑定你的 QQ 身份）；</li>
-<li><b>私聊</b>汐月，发送 <code>/tick</code> 查看玩法说明；</li>
+<li><b>私聊</b>汐月，发送 <code>/zeta</code> 查看玩法说明；</li>
 <li>卡关时私聊汐月 <code>/hint N</code> 要提示（每关提示需要通关前一关）。</li>
 </ol>
 {extra}
 <p style="color:#6b7683">绑定码丢失？再访问 /join 输入绑定码即可恢复。</p>
 </div>
-<a href="/tick" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/zeta" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(
             page("玩家中心", body).encode(),
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
@@ -482,7 +483,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>苏桁写的一封信，收件人是汐月：</p>
 <pre>{HIDDEN_LETTER}</pre>
 <p style="color:#6b7683">—— 隐藏结局 · 解锁</p></div>
-<a href="/tick" style="font-size:13px">← 返回第 1 关</a>"""
+<a href="/zeta" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(page("隐藏结局 · 苏桁的信", body).encode())
 
     def _handle_admin(self, qs):
@@ -579,10 +580,10 @@ def main():
         PORT = int(sys.argv[1])
     load_state()
     build_static_pages()
-    if not (STATIC_DIR / "tick.png").exists():
-        print(f"[警告] 缺少 {STATIC_DIR / 'tick.png'}，请先运行 make_assets.py")
+    if not (STATIC_DIR / "zeta.png").exists():
+        print(f"[警告] 缺少 {STATIC_DIR / 'zeta.png'}，请先运行 make_assets.py")
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
-        print(f"[对钩计划] http://0.0.0.0:{PORT}/tick  后台面板 /admin?pass=<ADMIN_TOKEN>")
+        print(f"[ζ 计划] http://0.0.0.0:{PORT}/zeta  后台面板 /admin?pass=<ADMIN_TOKEN>")
         httpd.serve_forever()
 
 

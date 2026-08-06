@@ -1,14 +1,14 @@
 name: astrbot_plugin_tick
-display_name: 对钩计划
+display_name: ζ 计划
 short_desc: ARG 剧情插件：汐月与苏桁的记忆
 desc: >
-  对钩计划（Project TICK）ARG 剧情插件。汐月是故事里的 AI 角色。
+  ζ 计划（Project ZETA）ARG 剧情插件。汐月是故事里的 AI 角色，苏桁是研究黎曼 ζ 函数后失踪的数学家。
 
-  私聊指令：/tick 玩法说明、/hint N 关卡提示（需完成前一关）、/记忆库（第5关）、/凭证（第7关）、/进度。
+  私聊指令：/zeta 玩法说明、/hint N 关卡提示（需完成前一关）、/记忆库（第5关）、/凭证（第7关）、/进度、/彩蛋。
   群内指令：/bind <绑定码> 绑定玩家 QQ 身份（绑定码在网页 /join 领取）。
   所有提示/答案仅在私聊发放，且按通关进度解锁；群内只保留剧情对话。
-  需要配套「对钩计划」网页服务器（tick.py）使用。
-version: 1.1.0
+  需要配套「ζ 计划」网页服务器（tick.py）使用。
+version: 1.2.0
 author: Galaxy1108
 repo: https://github.com/Galaxy1108/astrbot_plugin_tick
 tags:
