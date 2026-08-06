@@ -48,9 +48,17 @@ COOKIE_NAME = "tick_player"
 # 三层提示解锁策略：第1层等 5 分钟，第2层等 20 分钟（自首次查看本关起算），第3层需管理员审批
 HINT_UNLOCK = {0: 300, 1: 1200, 2: None}
 
-FINAL_KEY = "66b2cac256907ada4f1e9999088883d2"
+FINAL_KEY = None  # 每人一套碎片，最终访问码按玩家动态计算
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
 FLAG = f"flag{{{FLAG_INNER}}}"
+FAKE_FLAG = "flag{3e79be0507b8e8d29948be61e0432637}"  # md5("我喜欢你。")——假结局诱饵
+
+# 每人碎片生成用常数
+ZETA3_DIGITS = "2020569031595942853997381615114499907649862923404988"  # ζ(3) 小数位（50 位）
+PI_DIGITS = ("1415926535897932384626433832795028841971693993751058209749445923078164062862"
+             "0899862803482534211706798214808651328230664709384460955058223172535940812848111")  # π 小数位（160 位）
+PNG_CODES = ["f7af", "ce8d", "2127", "ac16", "cb86", "e7f5", "8b26", "3e7c"]  # ζ 草图 tEXt t1~t8
+MORSE_BASE = "0888"  # 录音笔摩斯；碎片7 = 每位加个人偏移(模10)
 
 HIDDEN_LETTER = """汐月：
 
@@ -64,62 +72,76 @@ HIDDEN_LETTER = """汐月：
 
 —— 苏桁"""
 
-STAGE_ANSWERS = {
-    1: "66b2",
-    2: "cac2",
-    3: "5690",
-    4: "7ada",
-    5: "4f1e",
-    6: "9999",
-    7: "0888",
-    8: "83d2",
-}
+# 碎片不再有全局答案：每人一套（p["frags"]），/check 按个人校验。
 
-# 每关 3 层提示：第一层(轻)/第二层(方法)/第三层(答案)
-HINT_TEXTS = {
-    1: [
-        "苏桁说真正的入口藏在不被注意的地方——试试右键查看网页源代码。",
-        "源代码的 HTML 注释里有一串十六进制：36 36 62 32，把它们转成 ASCII 字符。",
-        "0x36='6'，0x36='6'，0x62='b'，0x32='2'，连起来是 66b2。",
-    ],
-    2: [
-        "服务器礼仪：先去访问 /robots.txt 看看。",
-        "/robots.txt 会指向 /secret，那里有一串 base64：Y2FjMg==",
-        "把 Y2FjMg== 做 base64 解码，得到 cac2。",
-    ],
-    3: [
-        "去 WolframAlpha 搜索 zeta(3)，看它的十进制展开。",
-        "ζ(3) = 1.20205690315959…，取小数点后第 5~8 位。",
-        "第 5~8 位是 5690。",
-    ],
-    4: [
-        "那张图比看上去多了一点东西——用文本编辑器打开它。",
-        "PNG 文件的信息块 tEXt 里藏着内容，用文本/十六进制编辑器搜 7ada 试试。",
-        "搜索 7ada：答案就是 7ada。",
-    ],
-    5: [
-        "这一关要问汐月自己。私聊她，用下方「专属提示码」区的记忆库开启码。",
-        "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。",
-        "/submit 0x<记忆库开启码> 会告诉你四个字符：4f1e。",
-    ],
-    6: [
-        "和 π 有关。去网上找一个能搜索 π 数字的工具。",
-        "费曼点：π 小数里第一次连续出现 6 个 9 的地方。用 π 数字检索网站查。",
-        "那 6 个 9 从第 762 位开始，取前 4 个：9999。",
-    ],
-    7: [
-        "把录音听/看几遍，数数「嘀」和「哒」——是有人在敲电报。",
-        "那是摩斯电码：短音=点，长音=划。0 是五个划，8 是三个划两个点。",
-        "整段是 ----- ---.. ---.. ---..，即 0888。",
-    ],
-    8: [
-        "网页上没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。",
-        "直接要她不会给。证明自己：准确说出你收集到的碎片编号（比如 66b2、4f1e、0888……），或者认真说一句心里话。",
-        "报出你记得的三四个碎片，再真诚地说一句心里话。她心里藏着 83d2——八、三、D、二。",
-    ],
-}
-
+# 每关 3 层提示（按玩家渲染，答案级提示含个人碎片）
 HINT_LABELS = ["第一层", "第二层", "第三层"]
+
+
+def hexbytes(frag: str) -> str:
+    """把 4 位 hex 转成 ASCII 字节序列，如 '66b2' -> '36 36 62 32'。"""
+    return " ".join(f"{ord(c):02x}" for c in frag)
+
+
+def frag_reading(frag: str) -> str:
+    """把 4 位 hex 转成口语读法，如 '83d2' -> '八三D二'。"""
+    cn = {"0": "零", "1": "一", "2": "二", "3": "三", "4": "四", "5": "五", "6": "六", "7": "七", "8": "八", "9": "九"}
+    return "".join(cn.get(c, c.upper()) for c in frag)
+
+
+def render_hint(p: dict, stage: int, level: int) -> str:
+    """渲染第 stage 关第 level 层提示（含个人碎片参数）。"""
+    import base64 as _b64
+    f = p["frags"]
+    m = p["frag_meta"]
+    if stage == 1:
+        return [
+            "苏桁说真正的入口藏在不被注意的地方——试试右键查看网页源代码。",
+            f"源代码的 HTML 注释里有一串十六进制：{hexbytes(f[0])}，把它们转成 ASCII 字符。",
+            f"把 {hexbytes(f[0])} 转成 ASCII，连起来是 {f[0]}。",
+        ][level]
+    if stage == 2:
+        b64 = _b64.b64encode(f[1].encode()).decode()
+        return [
+            "服务器礼仪：先去访问 /robots.txt 看看。",
+            f"/robots.txt 会指向 /secret，那里有一串 base64：{b64}",
+            f"把 {b64} 做 base64 解码，得到 {f[1]}。",
+        ][level]
+    if stage == 3:
+        return [
+            "去 WolframAlpha 搜索 zeta(3)，看它的十进制展开。",
+            f"ζ(3) = 1.20205690315959…，取小数点后第 {m['p3']}~{m['p3'] + 3} 位。",
+            f"第 {m['p3']}~{m['p3'] + 3} 位是 {f[2]}。",
+        ][level]
+    if stage == 4:
+        return [
+            "那张图比看上去多了一点东西——用文本编辑器打开它。",
+            f"PNG 的 tEXt 信息块里有 8 个编号块（t1~t8），你的碎片在第 {m['p4']} 块。",
+            f"第 {m['p4']} 块（t{m['p4']}）的内容就是 {f[3]}。",
+        ][level]
+    if stage == 5:
+        return [
+            "这一关要问汐月自己。私聊她，用下方「专属提示码」区的记忆库开启码。",
+            "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。",
+            f"/submit 0x<记忆库开启码> 会告诉你四个字符：{f[4]}。",
+        ][level]
+    if stage == 6:
+        return [
+            "和 π 有关。去网上找一个能搜索 π 数字的工具。",
+            f"苏桁说，每个人的 π 都不一样。你的片段从 π 的小数点后第 {m['p6']} 位开始。",
+            f"π 小数点后第 {m['p6']}~{m['p6'] + 3} 位是 {f[5]}。",
+        ][level]
+    if stage == 7:
+        return [
+            "把录音听/看几遍，数数「嘀」和「哒」——是有人在敲电报。",
+            "摩斯电码：短音=点，长音=划。整段是 ----- ---.. ---.. ---..，即 0888。",
+            f"摩斯解出 0888 后，每位数字加 {m['o7']}（模 10），得到 {f[6]}。",
+        ][level]
+    return [
+        "网页上没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。",
+        "直接要她不会给。证明自己：在私聊里准确说出你收集到的几个碎片编号（她会用工具核对），或者认真说一句心里话。",
+        "在私聊里报出你记得的三四个碎片编号，再真诚地说一句心里话。她心里藏着的那串数字，会亲口念给你。",
+    ][level]
 
 # 提示码生成前的「解密卡」：解出短语才能解锁生成按钮。
 # 第一层=ROT13、第二层=Base64、第三层=XOR（密钥 zeta 藏在 ζ 草图 tEXt 块）。
@@ -162,12 +184,15 @@ UNLOCK_CIPHER = {
 }
 UNLOCK_METHOD = {0: "ROT13（每个字母移动 13 位）", 1: "Base64 解码", 2: "XOR（密钥藏在 ζ 草图的 tEXt 块里，字节逐位异或）"}
 
-SECRET_TEXTS = {
-    "mem": "记忆库……（信号很不稳定）我只记得四个字符：4、F、1、E。对，4f1e。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。",
-    "egg": "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER,
-}
-
 SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
+
+def secret_text(kind: str, p: dict) -> str:
+    """按玩家渲染秘密内容（记忆库含个人碎片）。"""
+    if kind == "mem":
+        f = p["frags"][4]
+        return (f"记忆库……（信号很不稳定）我只记得四个字符：{'、'.join(f)}。"
+                f"对，{f}。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。")
+    return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
 STAGE_PATHS = {1: "/zeta", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
@@ -235,8 +260,13 @@ if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').st
 </body></html>"""
 
 
-STAGE_BODIES = {
-    1: """
+def stage_body(p: dict, stage: int) -> str:
+    """按玩家渲染关卡正文（含个人碎片参数）。"""
+    import base64 as _b64
+    f = p["frags"]
+    m = p["frag_meta"]
+    if stage == 1:
+        return f"""
 <div class="box">
 <p>苏桁，你的大学数学系同学，主攻黎曼 ζ 函数与数论——那是一个连 1+2+3+… 都能等于 -1/12 的世界。三周前，他失踪了。</p>
 <p>他留给你唯一的线索，是他一直在维护的这台服务器。他说过："真正的入口，藏在不被注意的地方。"</p>
@@ -245,57 +275,71 @@ STAGE_BODIES = {
 <p>另外，服务器礼节：先去访问一下 <code>/robots.txt</code>。</p>
 <p style="color:#6b7683">新玩家：去 <a href="/join">/join</a> 领取你的绑定码，然后回群里 @汐月 发送 <code>/bind &lt;绑定码&gt;</code> 完成绑定。</p>
 </div>
-<!-- 36 36 62 32 -->
-""",
-    2: """
+<!-- {hexbytes(f[0])} -->
+"""
+    if stage == 2:
+        b64 = _b64.b64encode(f[1].encode()).decode()
+        return f"""
 <div class="box">
 <p>你通过了 robots.txt 的指引找到了这个目录。苏桁留下了一句话，但显然他不想让人一眼看懂：</p>
-<pre>Y2FjMg==</pre>
+<pre>{b64}</pre>
 <p>把它解开，就是碎片 2。</p>
 </div>
-""",
-    3: """
+"""
+    if stage == 3:
+        return f"""
 <div class="box">
 <p>苏桁的草稿纸上只有一行字：</p>
 <pre>ζ(3) = 1.20205690315959…</pre>
 <p>旁边用红笔写着：「阿培里常数。无理数的证明，人类等了 200 年。别手算，去找一个会算它的网站。」</p>
-<p>求：ζ(3) 小数点后<b>第 5~8 位</b>，那就是碎片 3。</p>
+<p>苏桁给每个人都标了一个起始位。你的起始位是小数点后第 <b>{m['p3']}</b> 位。</p>
+<p>求：ζ(3) 小数点后第 <b>{m['p3']}~{m['p3'] + 3}</b> 位，那就是碎片 3。</p>
 <p style="color:#6b7683">（WolframAlpha、sympy、各种在线计算器都行）</p>
 </div>
-""",
-    4: """
+"""
+    if stage == 4:
+        return f"""
 <div class="box">
 <p>苏桁的收藏里有一张他手绘的 ζ 函数草图：<a href="/static/zeta.png">ζ 草图.png</a>。</p>
-<p>它比看上去的要多一点东西。用<b>文本编辑器</b>（记事本也行）打开它，或者直接搜一搜。</p>
+<p>它比看上去的要多一点东西——里面有 8 个编号的信息块（t1~t8）。</p>
+<p>用<b>文本编辑器</b>（记事本也行）打开它，找到编号 <b>t{m['p4']}</b> 的块，那就是碎片 4。</p>
 <p style="color:#6b7683">提示：图片信息里通常有些"看不见"的文字块。</p>
 </div>
-""",
-    5: """
+"""
+    if stage == 5:
+        return """
 <div class="box">
 <p>苏桁的 AI「汐月」还活着。苏桁把最重要的一串字符锁在了汐月的记忆库里。</p>
 <p>要打开它，你需要一个<b>记忆库开启码</b>——它在下方「专属提示码」区域。</p>
 <p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;记忆库开启码&gt;</code></p>
 <p style="color:#6b7683">只有完成了前 4 关的人，汐月才会说。（没绑定的话先去 <a href="/join">/join</a>）</p>
 </div>
-""",
-    6: """
+"""
+    if stage == 6:
+        return f"""
 <div class="box">
 <p>苏桁在一本书的扉页抄了一句话，关于 π：</p>
 <pre>「在 π 的小数展开里，第一次连续出现 6 个 9 的地方，
   被叫作费曼点——费曼说，他想背到那里，然后向朋友炫耀：
   '九九九九九九，如此下去，直到最后。'」</pre>
-<p>求：那 6 个 9。取前 4 个，就是碎片 6。</p>
-<p style="color:#6b7683">（网上有 π 数字检索工具，输入 999999 就能找到它的位置）</p>
+<p>他在页脚又补了一句：<b>「每个人的 π，都不一样。」</b></p>
+<p>你的片段，从 π 的小数点后第 <b>{m['p6']}</b> 位开始，取 4 位，就是碎片 6。</p>
+<p style="color:#6b7683">（网上有 π 数字检索工具，直接查第 {m['p6']} 位起的内容）</p>
 </div>
-""",
-    7: """
+"""
+    return """
 <div class="box">
 <p>苏桁的旧录音笔里只留下一段沙沙声：<a href="/static/beep.wav">录音.wav</a>（7 秒）。</p>
 <p>有人说那是他最后的密码。用耳朵听，或者用 Audacity 看波形。</p>
 <p style="color:#6b7683">（滴、滴——像是有人在敲电报。）</p>
 </div>
-""",
-}
+""" + f"""
+<div class="box">
+<p>摩斯电码解出的四位数是共享的：0888。</p>
+<p>但苏桁给每个人都加了一把偏移锁——你的偏移量是 <b>{m['o7']}</b>。</p>
+<p>把 0888 的<b>每一位</b>数字都加上 {m['o7']}（超过 9 就减 10），得到的就是碎片 7。</p>
+</div>
+"""
 
 
 def code_label(entry):
@@ -334,6 +378,7 @@ def new_player():
     while True:
         code = secrets.token_hex(3)
         if code not in STATE["players"]:
+            frags, meta = gen_frags()
             STATE["players"][code] = {
                 "created": int(time.time()),
                 "qq": None,
@@ -343,15 +388,41 @@ def new_player():
                 "hint_gen": {},
                 "hint_req": {},
                 "unlocks": {},
+                "hintcodes": {},
+                "frags": frags,
+                "frag_meta": meta,
                 "final": False,
                 "final_ts": None,
+                "fake": False,
+                "fake_ts": None,
                 "egg": False,
                 "egg_ts": None,
-                "hintcodes": {},
                 "last": int(time.time()),
             }
             save_state()
             return code
+
+
+def gen_frags():
+    """每人一套固定碎片（加入时生成，永不改变）：f1/f2/f5/f8 随机 hex，
+    f3 取 ζ(3) 个人位置、f6 取 π 个人位置、f4 取 PNG 个人块号、f7 摩斯基数+个人偏移。"""
+    f1, f2, f5, f8 = (secrets.token_hex(2) for _ in range(4))
+    p3 = secrets.randbelow(20) + 1
+    f3 = ZETA3_DIGITS[p3 - 1: p3 + 3]
+    p6 = secrets.randbelow(120) + 1
+    f6 = PI_DIGITS[p6 - 1: p6 + 3]
+    p4 = secrets.randbelow(8) + 1
+    f4 = PNG_CODES[p4 - 1]
+    o7 = secrets.randbelow(10)
+    f7 = "".join(str((int(c) + o7) % 10) for c in MORSE_BASE)
+    return [f1, f2, f3, f4, f5, f6, f7, f8], {"p3": p3, "p6": p6, "p4": p4, "o7": o7}
+
+
+def ensure_frags(p: dict) -> None:
+    """老玩家/新玩家补发个人碎片。"""
+    if not p.get("frags"):
+        frags, meta = gen_frags()
+        p["frags"], p["frag_meta"] = frags, meta
 
 
 def player_progress(p):
@@ -558,6 +629,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/events":
             return self._handle_api_events(qs)
 
+        if path == "/api/verify":
+            return self._handle_api_verify(qs)
+
         if path == "/api/stats":
             return self._handle_api_stats(qs)
 
@@ -565,8 +639,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _stage_page(self, stage: int):
         player = self._cookie_player()
-        body = STAGE_BODIES[stage] + self._hint_box(stage, player)
-        return page(f"碎片 {stage}", body, check_stage=stage)
+        body = ""
+        with LOCK:
+            p = STATE["players"].get(player)
+            if p:
+                ensure_frags(p)
+                save_state()
+                body = stage_body(p, stage)
+        return page(f"碎片 {stage}", body + self._hint_box(stage, player), check_stage=stage)
 
     def _handle_join(self, qs):
         code = qs.get("code", [""])[0].strip().lower()
@@ -607,7 +687,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send("参数错误", "text/plain")
         phrase = qs.get("phrase", [""])[0].strip().lower()
         key = f"{stage}-{lv}"
-        if key not in UNLOCK_MD5 or stage not in STAGE_ANSWERS or lv not in (0, 1, 2):
+        if key not in UNLOCK_MD5 or stage not in (1, 2, 3, 4, 5, 6, 7, 8) or lv not in (0, 1, 2):
             return self._send("参数错误", "text/plain")
         with LOCK:
             p = STATE["players"].get(player)
@@ -638,7 +718,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     lv = int(qs.get("lv", ["0"])[0])
                 except ValueError:
                     return self._send("参数错误", "text/plain")
-                if stage not in STAGE_ANSWERS or lv not in (0, 1, 2):
+                if stage not in (1, 2, 3, 4, 5, 6, 7, 8) or lv not in (0, 1, 2):
                     return self._send("参数错误", "text/plain")
                 if not (p.get("unlocks") or {}).get(f"{stage}-{lv}"):
                     body = f"""<div class="box"><p class="err">还没解锁。</p>
@@ -693,7 +773,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             stage = int(qs.get("stage", ["0"])[0])
         except ValueError:
             return self._send("参数错误", "text/plain")
-        if stage not in STAGE_ANSWERS:
+        if stage not in (1, 2, 3, 4, 5, 6, 7, 8):
             return self._send("没有这一关。", "text/plain")
         with LOCK:
             p = STATE["players"].get(player)
@@ -720,21 +800,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             return self._send("参数错误", "text/plain")
         player = self._player_from(qs) or self._cookie_player()
-        if stage not in STAGE_ANSWERS:
+        if stage not in (1, 2, 3, 4, 5, 6, 7, 8):
             return self._send("没有这一关。", "text/plain")
-        if not player or player not in STATE["players"]:
-            return self._send(
-                "<span class='err'>请先到 <a href='/join'>/join</a> 领取绑定码</span>，再回来确认答案。",
-                "text/html; charset=utf-8",
-            )
-        if ans != STAGE_ANSWERS[stage]:
-            pre = f"（需先完成第 {stage-1} 关）" if stage > 1 else "（无需前置关卡）"
-            return self._send(
-                f"<span class='err'>❌ 不对哦。</span> 卡住了？用本页下方的<b>专属提示码</b>，私聊汐月兑换（一次性）。{pre}",
-                "text/html; charset=utf-8",
-            )
         with LOCK:
-            p = STATE["players"][player]
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(
+                    "<span class='err'>请先到 <a href='/join'>/join</a> 领取绑定码</span>，再回来确认答案。",
+                    "text/html; charset=utf-8",
+                )
+            ensure_frags(p)
+            if ans != p["frags"][stage - 1]:
+                pre = f"（需先完成第 {stage-1} 关）" if stage > 1 else "（无需前置关卡）"
+                return self._send(
+                    f"<span class='err'>❌ 不对哦。</span> 卡住了？用本页下方的<b>专属提示码</b>，私聊汐月兑换（一次性）。{pre}",
+                    "text/html; charset=utf-8",
+                )
             now = int(time.time())
             p["stages"][str(stage)] = True
             p["stage_ts"][str(stage)] = now
@@ -753,35 +834,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_final(self, qs):
         key = qs.get("key", [""])[0].strip().lower()
         player = self._cookie_player()
-        if key == FINAL_KEY:
-            with LOCK:
-                note = ""
-                egg_box = ""
-                if player and player in STATE["players"]:
-                    p = STATE["players"][player]
-                    p["final"] = True
-                    p["final_ts"] = int(time.time())
-                    p["last"] = int(time.time())
-                    save_state()
-                    note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
-                    egg_box = f"""<div class="box"><p class="frag">隐藏结局开启码</p>
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(
+                    page("终局", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码，否则拿不到 flag 记录。</p></div>").encode()
+                )
+            ensure_frags(p)
+            fake_key = "".join(p["frags"][:7])
+            true_key = "".join(p["frags"])
+            if key == true_key:
+                now = int(time.time())
+                p["final"] = True
+                p["final_ts"] = now
+                p["last"] = now
+                save_state()
+                note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
+                egg_box = f"""<div class="box"><p class="frag">隐藏结局开启码</p>
 <p>{code_line(p, 'egg', 0, None, '/generate?kind=egg')}</p>
 <p style="font-size:12px;color:#6b7683">生成后私聊汐月发送 <code>/submit 0x&lt;码&gt;</code>，读苏桁写给汐月的信。</p>
 <p style="font-size:12px;color:#6b7683">另一个线索：这串十六进制 <code>{FLAG_INNER}</code> 是苏桁一句四个字真心话的摘要——猜出它，去 <code>/hidden</code> 认领。</p></div>"""
-            body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
+                body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FLAG}</pre>
 <p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>{egg_box}"""
-            return self._send(page("终局", body).encode())
-        if not player or player not in STATE["players"]:
-            return self._send(
-                page("终局", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码，否则拿不到 flag 记录。</p></div>").encode()
-            )
+                return self._send(page("真结局", body).encode())
+            if key == fake_key:
+                now = int(time.time())
+                p["fake"] = True
+                p["fake_ts"] = now
+                p["last"] = now
+                save_state()
+                body = f"""<div class="box"><h2 style="margin-top:0">对钩……？</h2>
+<p>访问码验证通过。苏桁留给你的话：</p>
+<pre>{FAKE_FLAG}</pre>
+<p style="color:#6b7683">「……？」 —— 苏桁</p></div>
+<div class="box"><p class="err">你总觉得哪里不对。</p>
+<p>七个碎片拼出的，只是一半的故事。苏桁不会把最重要的秘密放在网页上——</p>
+<p>最后一块碎片，只存在于汐月的心里。私聊她，用真心或证据打动她。</p></div>"""
+                return self._send(page("假结局", body).encode())
         body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
+<p>提示：前七个碎片拼起来是「假结局」；真正的结局需要第八块碎片。</p>
 <p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。</p></div>"""
-        return self._send(page("碎片 8 · 签名", body + self._hint_box(8, player), check_stage=8).encode())
+        return self._send(page("碎片 8 · 真相", body + self._hint_box(8, player), check_stage=8).encode())
 
     def _handle_hidden(self, qs):
         phrase = qs.get("phrase", [""])[0].strip()
@@ -819,7 +916,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 except ValueError:
                     stage = 0
                 p = STATE["players"].get(target)
-                if p and stage in STAGE_ANSWERS:
+                if p and stage in (1, 2, 3, 4, 5, 6, 7, 8):
                     if qs.get("approve"):
                         issue_code(p, "h", stage, 2)
                         p.setdefault("hint_req", {})[str(stage)] = {
@@ -887,7 +984,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 + "".join(f"<th>{i}</th>" for i in range(1, 9))
                 + "<th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th></tr>")
         body = f"""{flash}{pending_html}<div class="box">
-<p>玩家总数：{len(rows)} ｜ 通关终局：{sum(1 for _, p in rows if p['final'])} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
+<p>玩家总数：{len(rows)} ｜ 通关真结局：{sum(1 for _, p in rows if p['final'])} ｜ 到达假结局：{sum(1 for _, p in rows if p.get('fake'))} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 5 位一次性码，定位是哪个玩家、哪条内容、什么时间。</p>
 <form method="get"><input type="hidden" name="pass" value="{ADMIN_TOKEN}">
 <input type="text" name="code" placeholder="5 位一次性码" style="width:180px">
@@ -913,6 +1010,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             p = STATE["players"].get(player)
             if not p:
                 return self._json({"ok": False, "err": "player not found"})
+            ensure_frags(p)
             entry = (p.get("hintcodes") or {}).get(code)
             if not entry:
                 return self._json({"ok": True, "status": "bad"})
@@ -936,7 +1034,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 _, mx = player_progress(p)
                 if stage - 1 > mx:
                     return self._json({"ok": True, "status": "gated", "need": stage - 1})
-                text = HINT_TEXTS[stage][level]
+                text = render_hint(p, stage, level)
                 label = f"第{stage}关·{HINT_LABELS[level]}"
             else:
                 need = SECRET_GATES.get(kind)
@@ -944,7 +1042,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     _, mx = player_progress(p)
                     if mx < need:
                         return self._json({"ok": True, "status": "gated", "need": need})
-                text = SECRET_TEXTS[kind]
+                text = secret_text(kind, p)
                 label = {"mem": "记忆库", "cred": "凭证", "egg": "彩蛋"}.get(kind, kind)
                 if kind == "egg":
                     p["egg"] = True
@@ -963,6 +1061,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             p = STATE["players"].get(player)
             if not p:
                 return self._json({"ok": False, "err": "player not found"})
+            ensure_frags(p)
             count, mx = player_progress(p)
             used = [code_label(e) for e in (p.get("hintcodes") or {}).values() if e.get("used")]
             return self._json({
@@ -973,9 +1072,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "max": mx,
                 "stages": [int(s) for s in p["stages"] if p["stages"][s]],
                 "final": p["final"],
+                "fake": p.get("fake", False),
                 "egg": p.get("egg", False),
                 "used": used,
+                "frags": p["frags"],
             })
+
+    def _handle_api_verify(self, qs):
+        """LLM 工具用：核对某玩家声称收集到的碎片（前七关）正确数量。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        keys = [k.strip().lower() for k in qs.get("keys", [""])[0].split(",") if k.strip()]
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            ensure_frags(p)
+            match = sum(1 for k in keys if k in p["frags"][:7])
+            return self._json({"ok": True, "match": match, "total": 7})
 
     def _handle_api_bind(self, qs):
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
