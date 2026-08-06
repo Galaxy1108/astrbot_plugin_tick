@@ -1211,13 +1211,15 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
         return self._json({"ok": True, "found": found})
 
     def _handle_api_events(self, qs):
-        """供插件轮询：返回 after 之后的全部事件（逐关通关/终局/彩蛋），按时间排序。"""
+        """供插件轮询：返回 after 之后的全部事件（逐关通关/终局/彩蛋/审批），按时间排序。
+        窗口限制为最近 24 小时，防止插件重装后 KV 归零导致旧事件重放。"""
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
             return self._json({"ok": False, "err": "bad secret"}, 403)
         try:
             after = int(qs.get("after", ["0"])[0])
         except ValueError:
             after = 0
+        after = max(after, int(time.time()) - 86400)
         events = []
         with LOCK:
             for player, p in STATE["players"].items():
