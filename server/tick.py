@@ -916,6 +916,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_state()
         if stage == 8:
             nxt = "恭喜，8 个碎片齐了！<a href='/final'>去 /final 拼接访问码</a>"
+        elif stage == 7:
+            nxt = "访问码 = 碎片按关卡顺序首尾相接。<a href='/final'>去 /final 验证看看</a>"
         else:
             nxt = f"<a href='{NEXT_PAGE[stage]}'>前往下一关 →</a>"
         return self._send(
@@ -965,7 +967,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>像是缺了什么。真正的答案，好像从来都不在网页上。</p></div>"""
                 return self._send(page("对钩……？", body).encode())
         body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
-<p>感觉哪里不太对？好像……还缺了一块。</p>
+<p>访问码 = 碎片按关卡顺序首尾相接。再核对一遍，是不是还缺了一块？</p>
 <p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p></div>"""
@@ -1416,6 +1418,9 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 if p.get("egg_ts") and p["egg_ts"] >= after:
                     events.append({"type": "egg", "player": player, "qq": qq, "name": name,
                                    "ts": p["egg_ts"]})
+                if p.get("fake_ts") and p["fake_ts"] >= after:
+                    events.append({"type": "fake", "player": player, "qq": qq, "name": name,
+                                   "ts": p["fake_ts"]})
                 for st, r in (p.get("hint_req") or {}).items():
                     if r.get("status") == "approved" and r.get("approved_ts", 0) >= after:
                         events.append({"type": "hint_approved", "player": player, "qq": qq, "name": name,

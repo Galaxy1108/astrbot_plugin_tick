@@ -359,6 +359,8 @@ class Main(Star):
                 )
             elif etype == "egg":
                 text = f"彩蛋快报：{name}（{qq}）找到了隐藏结局！"
+            elif etype == "fake":
+                text = f"快报：{name}（{qq}）的访问码验证通过了——但是，感觉哪里不太对。"
             elif etype == "hint_approved":
                 pumo = await self.get_kv_data(f"tick_umo_{e['player']}", None)
                 if not pumo:
