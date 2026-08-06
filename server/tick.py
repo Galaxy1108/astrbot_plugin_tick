@@ -347,6 +347,8 @@ def stage_body(p: dict, stage: int) -> str:
 <div class="box">
 <p>录音里藏着一段四位数。</p>
 <p>……不对，好像还差了一点。</p>
+<p style="color:#6b7683">便签角落有一行小字：</p>
+<pre>1842 ＋ 偏移 3 → 4175（每一位相加，超过 9 就减 10）</pre>
 </div>
 """
 
