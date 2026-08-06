@@ -12,7 +12,7 @@
 
 一次性提示码系统:
     每关页面按玩家动态签发 3 层提示码 + 记忆库/凭证/彩蛋码（每人每码唯一）。
-    码自生成起 CODE_TTL 秒有效、用一次即焚；私聊汐月 /hint 0x<码> 等兑换。
+    码自生成起 CODE_TTL 秒有效、用一次即焚；私聊汐月 /submit 0x<码> 统一兑换。
     后台 /admin 输入泄露的码可定位泄密者。
 
 路由:
@@ -96,9 +96,9 @@ HINT_TEXTS = {
         "搜索 7ada：答案就是 7ada。",
     ],
     5: [
-        "这一关要问汐月自己。私聊她，用下面这个记忆库开启码。",
-        "汐月的记忆库是她的秘密：私聊发送 /记忆库 0x<记忆库开启码>（需完成前 4 关）。",
-        "/记忆库 会告诉你四个字符：4f1e。",
+        "这一关要问汐月自己。私聊她，用下方「专属提示码」区的记忆库开启码。",
+        "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。",
+        "/submit 0x<记忆库开启码> 会告诉你四个字符：4f1e。",
     ],
     6: [
         "和 π 有关。去网上找一个能搜索 π 数字的工具。",
@@ -106,9 +106,9 @@ HINT_TEXTS = {
         "那 6 个 9 从第 762 位开始，取前 4 个：9999。",
     ],
     7: [
-        "这一关要问汐月。私聊她，用下面这个凭证码。",
-        "口令在汐月那里：私聊发送 /凭证 0x<凭证码>（需完成前 6 关）。",
-        "/凭证 会告诉你碎片七：0888。",
+        "这一关要问汐月。私聊她，用下方「专属提示码」区的凭证码。",
+        "口令在汐月那里：私聊发送 /submit 0x<凭证码>（需完成前 6 关）。",
+        "/submit 0x<凭证码> 会告诉你碎片七：0888。",
     ],
     8: [
         "留意每一个页面的右下角。",
@@ -232,7 +232,7 @@ STAGE_BODIES = {
 <div class="box">
 <p>苏桁的 AI「汐月」还活着。苏桁把最重要的一串字符锁在了汐月的记忆库里。</p>
 <p>要打开它，你需要一个<b>记忆库开启码</b>——它在下方「专属提示码」区域。</p>
-<p>拿到后<b>私聊</b>汐月：<code>/记忆库 0x&lt;记忆库开启码&gt;</code></p>
+<p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;记忆库开启码&gt;</code></p>
 <p style="color:#6b7683">只有完成了前 4 关的人，汐月才会说。（没绑定的话先去 <a href="/join">/join</a>）</p>
 </div>
 """,
@@ -250,7 +250,7 @@ STAGE_BODIES = {
 <div class="box">
 <p>汐月最近变得敏感多疑。她只认一句"口令"——苏桁当年和她约定的暗语。</p>
 <p>要拿到口令，你需要一个<b>凭证码</b>——它在下方「专属提示码」区域。</p>
-<p>拿到后<b>私聊</b>汐月：<code>/凭证 0x&lt;凭证码&gt;</code></p>
+<p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;凭证码&gt;</code></p>
 <p style="color:#6b7683">只有完成了前 6 关的人，汐月才会理会。（没绑定的话先去 <a href="/join">/join</a>）</p>
 </div>
 """,
@@ -373,14 +373,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             codes = [issue_code(p, "h", stage, lv) for lv in range(3)]
             save_state()
             lines = "".join(
-                f"<p>{HINT_LABELS[i]}：<code>/hint 0x{c}</code></p>" for i, c in enumerate(codes)
+                f"<p>{HINT_LABELS[i]}：<code>/submit 0x{c}</code></p>" for i, c in enumerate(codes)
             )
             extra = ""
             if stage == 5:
-                extra = f"<p style='color:#ffd479'>记忆库开启码：<code>/记忆库 0x{issue_code(p, 'mem', 5, None)}</code></p>"
+                extra = f"<p style='color:#ffd479'>记忆库开启码：<code>/submit 0x{issue_code(p, 'mem', 5, None)}</code></p>"
                 save_state()
             if stage == 7:
-                extra = f"<p style='color:#ffd479'>凭证码：<code>/凭证 0x{issue_code(p, 'cred', 7, None)}</code></p>"
+                extra = f"<p style='color:#ffd479'>凭证码：<code>/submit 0x{issue_code(p, 'cred', 7, None)}</code></p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
 <p>私聊汐月发送对应指令兑换，每人每码只能用一次，自生成起 10 分钟有效（过期回本页刷新）。</p>
@@ -482,7 +482,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <ol>
 <li>回到群里，@汐月 发送 <code>/bind {code}</code>（绑定你的 QQ 身份）；</li>
 <li><b>私聊</b>汐月，发送 <code>/zeta</code> 查看玩法说明；</li>
-<li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/hint 0x&lt;码&gt;</code> 兑换
+<li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/submit 0x&lt;码&gt;</code> 兑换
 （每人每码只能用一次，10 分钟有效）。</li>
 </ol>
 {extra}
@@ -545,7 +545,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     save_state()
                     note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
                     egg_box = f"""<div class="box"><p class="frag">隐藏结局开启码</p>
-<p>私聊汐月发送 <code>/彩蛋 0x{ec}</code>，读苏桁写给汐月的信。</p>
+<p>私聊汐月发送 <code>/submit 0x{ec}</code>，读苏桁写给汐月的信。</p>
 <p style="font-size:12px;color:#6b7683">另一个线索：这串十六进制 <code>{FLAG_INNER}</code> 是苏桁一句四个字真心话的摘要——猜出它，去 <code>/hidden</code> 认领。</p></div>"""
             body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>

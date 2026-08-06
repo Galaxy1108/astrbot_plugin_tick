@@ -8,7 +8,7 @@ desc: >
   群内指令：/bind <绑定码> 绑定玩家 QQ 身份（绑定码在网页 /join 领取）。
   所有提示/答案仅在私聊发放，且按通关进度解锁；群内只保留剧情对话。
   需要配套「ζ 计划」网页服务器（tick.py）使用。
-version: 1.5.0
+version: 1.6.0
 author: Galaxy1108
 repo: https://github.com/Galaxy1108/astrbot_plugin_tick
 tags:

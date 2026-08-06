@@ -1,12 +1,10 @@
 """ζ 计划（Project ZETA）—— AstrBot 剧情插件（汐月）
 
 一次性码兑付机制：每关页面按玩家签发专属提示码（每人每码唯一，10 分钟有效，用完即焚）。
-私聊指令全部以码为凭证，由网页 /api/redeem 统一兑付：
-    /hint 0x<码>     兑换本关 3 层提示之一（需通关前一关）
-    /记忆库 0x<码>    第 5 关（需完成前 4 关）
-    /凭证 0x<码>      第 7 关（需完成前 6 关）
-    /彩蛋 0x<码>      隐藏结局（终局页签发）
-群内（包括 @）发送这些指令一律无效、不消耗码；群内只保留剧情与 /bind。
+所有内容统一通过一个指令私聊兑换，码自带身份（3 层提示 / 记忆库 / 凭证 / 彩蛋）：
+    /submit 0x<码>   由网页 /api/redeem 按码兑付
+    /进度             查看通关进度
+群内（包括 @）发送 /submit 一律无效、不消耗码；群内只保留剧情与 /bind。
 玩家通关后，插件向指定群聊推送通关播报。
 """
 
@@ -27,7 +25,7 @@ POLL_INTERVAL = 30  # 秒
 class Main(Star):
     """ζ 计划：汐月与苏桁的记忆。
 
-    私聊指令：/zeta /hint 0x码 /记忆库 0x码 /凭证 0x码 /彩蛋 0x码 /进度
+    私聊指令：/zeta /submit 0x码 /进度
     群内指令：/bind <绑定码>
     """
 
@@ -80,7 +78,7 @@ class Main(Star):
         code = code.strip().lower()
         return code[2:] if code.startswith("0x") else code
 
-    # ---------- 私聊指令（一次性码兑付） ----------
+    # ---------- 私聊指令 ----------
 
     @filter.command("zeta", alias={"tick"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
@@ -89,16 +87,17 @@ class Main(Star):
             "汐月：你想知道苏桁的事？先按顺序来：\n"
             "1. 在群里 @我，发送 /bind <绑定码>（绑定码去网页 /join 领取）；\n"
             "2. 从网页 /zeta 开始解谜；\n"
-            "3. 每关页面的「专属提示码」区有 3 层提示码，私聊我 /hint 0x<码> 兑换"
-            "（每人每码只能用一次，10 分钟有效）；\n"
-            "4. 第 5 关用 /记忆库 0x<码>，第 7 关用 /凭证 0x<码>，通关后的 /彩蛋 0x<码> 是另一个故事；\n"
-            "5. /进度 查看自己的通关进度。\n"
+            "3. 每关页面的「专属提示码」区有你的码，私聊我 /submit 0x<码> 兑换"
+            "（提示、记忆库、凭证、彩蛋都走这一个指令，每人每码只能用一次，10 分钟有效）；\n"
+            "4. /进度 查看自己的通关进度。\n"
             "苏桁说，秘密只能一对一地说，说了就没了。"
         )
 
-    async def _redeem(self, event: AstrMessageEvent, code: str, what: str):
+    @filter.command("submit", alias={"提交", "兑换"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def submit_cmd(self, event: AstrMessageEvent, code: str):
         if not event.is_private_chat():
-            yield event.plain_result(f"{what}的事，只能在私聊里说。")
+            yield event.plain_result("码的事，只能在私聊里说。")
             return
         ret, err = await self._call(event, "/api/redeem", {"code": self._norm(code)})
         if err:
@@ -107,7 +106,7 @@ class Main(Star):
         status = ret.get("status")
         if status == "ok":
             tail = f"（{ret['label']}，已使用）" if ret.get("label") else ""
-            yield event.plain_result(ret["text"] + "\n" + tail if tail else ret["text"])
+            yield event.plain_result(ret["text"] + ("\n" + tail if tail else ""))
         elif status == "gated":
             yield event.plain_result(f"不行哦，你还没通关第 {ret['need']} 关，这个码还不能用。")
         elif status == "expired":
@@ -116,30 +115,6 @@ class Main(Star):
             yield event.plain_result("这个码已经用过了（一次性），它不会再出现了。")
         else:
             yield event.plain_result("这不是有效的码。检查一下有没有抄错，或者回网页重新领取。")
-
-    @filter.command("hint", alias={"提示"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def hint_cmd(self, event: AstrMessageEvent, code: str):
-        async for r in self._redeem(event, code, "提示"):
-            yield r
-
-    @filter.command("记忆库", alias={"frag5"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def memory_cmd(self, event: AstrMessageEvent, code: str):
-        async for r in self._redeem(event, code, "记忆库"):
-            yield r
-
-    @filter.command("凭证", alias={"frag7"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def credential_cmd(self, event: AstrMessageEvent, code: str):
-        async for r in self._redeem(event, code, "凭证"):
-            yield r
-
-    @filter.command("彩蛋", alias={"hidden"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def egg_cmd(self, event: AstrMessageEvent, code: str):
-        async for r in self._redeem(event, code, "彩蛋"):
-            yield r
 
     @filter.command("进度", alias={"progress"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
@@ -177,7 +152,7 @@ class Main(Star):
 
     # ---------- 群内拦截：敏感指令在群里一律无效（不消耗任何码） ----------
 
-    @filter.regex(r"^(记忆库|凭证|彩蛋|hint|提示|进度|zeta|tick)\b")
+    @filter.regex(r"^(submit|提交|兑换|进度|zeta|tick)\b")
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def group_block(self, event: AstrMessageEvent):
         self._remember_group(event)
