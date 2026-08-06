@@ -136,6 +136,7 @@ class Main(Star):
 
     async def _call(self, event: AstrMessageEvent, path: str, params: dict):
         """带上玩家身份调用网页 API；返回 (ret, err_msg)。同时记录玩家私聊会话供通知使用。"""
+        self._remember_group(event)
         code = await self._bound_code(event)
         if not code:
             return None, "你还没绑定玩家身份。先去网页 /join 领取绑定码，再到群里 @我发送 /bind <绑定码>。"
@@ -327,11 +328,15 @@ class Main(Star):
     # ---------- 通关/进度播报（轮询网页 /api/events） ----------
 
     def _remember_group(self, event: AstrMessageEvent) -> None:
-        """记住指定群的会话标识（umo），供播报使用。"""
-        if event.is_private_chat():
-            return
+        """记住播报目标：notify_group 填群号 → 该群；填 QQ 号 → 该私聊（测试用）。"""
         ng = str(self.config.get("notify_group", "") or "")
-        if ng and str(event.get_group_id() or "") != ng:
+        if not ng:
+            return
+        if event.is_private_chat():
+            if str(event.get_sender_id()) == ng:
+                self._group_umo = event.unified_msg_origin
+            return
+        if str(event.get_group_id() or "") != ng:
             return
         self._group_umo = event.unified_msg_origin
 
