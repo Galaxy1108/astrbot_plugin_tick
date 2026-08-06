@@ -1,13 +1,16 @@
 """ζ 计划（Project ZETA）—— AstrBot 剧情插件（汐月）
 
-所有提示/答案/彩蛋均为私聊一次性发放：内容存放在网页服务器，
-插件只做"领取"动作，回复附带每人每次唯一的实时十六进制码（10 分钟有效）。
-群内（包括 @）只保留剧情对话与 /bind 绑定指令。
-玩家通关后，插件会向指定群聊（配置 notify_group）推送通关播报。
+一次性码兑付机制：每关页面按玩家签发专属提示码（每人每码唯一，10 分钟有效，用完即焚）。
+私聊指令全部以码为凭证，由网页 /api/redeem 统一兑付：
+    /hint 0x<码>     兑换本关 3 层提示之一（需通关前一关）
+    /记忆库 0x<码>    第 5 关（需完成前 4 关）
+    /凭证 0x<码>      第 7 关（需完成前 6 关）
+    /彩蛋 0x<码>      隐藏结局（终局页签发）
+群内（包括 @）发送这些指令一律无效、不消耗码；群内只保留剧情与 /bind。
+玩家通关后，插件向指定群聊推送通关播报。
 """
 
 import asyncio
-import hashlib
 import urllib.parse
 
 import aiohttp
@@ -18,17 +21,14 @@ from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import Plain
 from astrbot.api.star import Star
 
-FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
-
 POLL_INTERVAL = 30  # 秒
 
 
 class Main(Star):
     """ζ 计划：汐月与苏桁的记忆。
 
-    私聊指令：/zeta /hint N /记忆库 /凭证 /进度 /彩蛋（均为一次性，附专属实时码）
+    私聊指令：/zeta /hint 0x码 /记忆库 0x码 /凭证 0x码 /彩蛋 0x码 /进度
     群内指令：/bind <绑定码>
-    通关播报：轮询网页 /api/finished，向 notify_group 指定的群推送。
     """
 
     def __init__(self, context, config=None):
@@ -75,9 +75,136 @@ class Main(Star):
             return None, "汐月的信号不稳定，稍后再试试。"
         return ret, None
 
-    def _fmt(self, ret: dict, prefix: str = "") -> str:
-        """把一次性领取结果格式化为回复文本。"""
-        return prefix + ret["text"] + f"\n（专属实时码：{ret['code']}，自生成起 10 分钟有效，截图会暴露你自己）"
+    @staticmethod
+    def _norm(code: str) -> str:
+        code = code.strip().lower()
+        return code[2:] if code.startswith("0x") else code
+
+    # ---------- 私聊指令（一次性码兑付） ----------
+
+    @filter.command("zeta", alias={"tick"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def zeta_help(self, event: AstrMessageEvent):
+        yield event.plain_result(
+            "汐月：你想知道苏桁的事？先按顺序来：\n"
+            "1. 在群里 @我，发送 /bind <绑定码>（绑定码去网页 /join 领取）；\n"
+            "2. 从网页 /zeta 开始解谜；\n"
+            "3. 每关页面的「专属提示码」区有 3 层提示码，私聊我 /hint 0x<码> 兑换"
+            "（每人每码只能用一次，10 分钟有效）；\n"
+            "4. 第 5 关用 /记忆库 0x<码>，第 7 关用 /凭证 0x<码>，通关后的 /彩蛋 0x<码> 是另一个故事；\n"
+            "5. /进度 查看自己的通关进度。\n"
+            "苏桁说，秘密只能一对一地说，说了就没了。"
+        )
+
+    async def _redeem(self, event: AstrMessageEvent, code: str, what: str):
+        if not event.is_private_chat():
+            yield event.plain_result(f"{what}的事，只能在私聊里说。")
+            return
+        ret, err = await self._call(event, "/api/redeem", {"code": self._norm(code)})
+        if err:
+            yield event.plain_result(err)
+            return
+        status = ret.get("status")
+        if status == "ok":
+            tail = f"（{ret['label']}，已使用）" if ret.get("label") else ""
+            yield event.plain_result(ret["text"] + "\n" + tail if tail else ret["text"])
+        elif status == "gated":
+            yield event.plain_result(f"不行哦，你还没通关第 {ret['need']} 关，这个码还不能用。")
+        elif status == "expired":
+            yield event.plain_result("这个码过期了。回到网页上对应关卡，刷新页面重新领取。")
+        elif status == "used":
+            yield event.plain_result("这个码已经用过了（一次性），它不会再出现了。")
+        else:
+            yield event.plain_result("这不是有效的码。检查一下有没有抄错，或者回网页重新领取。")
+
+    @filter.command("hint", alias={"提示"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def hint_cmd(self, event: AstrMessageEvent, code: str):
+        async for r in self._redeem(event, code, "提示"):
+            yield r
+
+    @filter.command("记忆库", alias={"frag5"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def memory_cmd(self, event: AstrMessageEvent, code: str):
+        async for r in self._redeem(event, code, "记忆库"):
+            yield r
+
+    @filter.command("凭证", alias={"frag7"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def credential_cmd(self, event: AstrMessageEvent, code: str):
+        async for r in self._redeem(event, code, "凭证"):
+            yield r
+
+    @filter.command("彩蛋", alias={"hidden"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def egg_cmd(self, event: AstrMessageEvent, code: str):
+        async for r in self._redeem(event, code, "彩蛋"):
+            yield r
+
+    @filter.command("进度", alias={"progress"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def progress_cmd(self, event: AstrMessageEvent):
+        if not event.is_private_chat():
+            yield event.plain_result("你的进度，私聊里才能看。")
+            return
+        ret, err = await self._call(event, "/api/progress", {})
+        if err:
+            yield event.plain_result(err)
+            return
+        done = sorted(ret.get("stages", []))
+        line = " ".join(f"✓{s}" for s in done) if done else "还没有通关记录"
+        used = ret.get("used", [])
+        used_line = (" ｜ 已用：" + "、".join(used)) if used else ""
+        egg = " ｜ 彩蛋 ✓" if ret.get("egg") else ""
+        yield event.plain_result(
+            f"你的进度：{ret.get('count', 0)}/8 关 ｜ {line}{used_line}{' ｜ 终局 ✓' if ret.get('final') else ''}{egg}"
+        )
+
+    # ---------- 群内指令：绑定 ----------
+
+    @filter.command("bind", alias={"绑定"})
+    async def bind_cmd(self, event: AstrMessageEvent, code: str):
+        self._remember_group(event)
+        code = code.strip().lower()
+        qq = str(event.get_sender_id())
+        name = event.get_sender_name() or ""
+        ret = await self._api("/api/bind", {"player": code, "qq": qq, "name": name})
+        if ret and ret.get("ok"):
+            await self.put_kv_data(f"tick_qq_{qq}", code)
+            yield event.plain_result(f"绑定成功！{name}（{qq}）→ 绑定码 {code}。私聊我发送 /zeta 开始。")
+        else:
+            yield event.plain_result("绑定失败：这个绑定码不存在。先去网页 /join 领取绑定码，再回来绑定。")
+
+    # ---------- 群内拦截：敏感指令在群里一律无效（不消耗任何码） ----------
+
+    @filter.regex(r"^(记忆库|凭证|彩蛋|hint|提示|进度|zeta|tick)\b")
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    async def group_block(self, event: AstrMessageEvent):
+        self._remember_group(event)
+        yield event.plain_result(
+            "这些指令只能在私聊里使用，在群里说了是无效的（也不会消耗你的码）。"
+            "想聊剧情的话，随时可以 @我。"
+        )
+
+    # ---------- 群内剧情对话（不含任何答案/提示） ----------
+
+    @filter.regex(r"苏桁|ζ|黎曼")
+    async def lore(self, event: AstrMessageEvent):
+        self._remember_group(event)
+        yield event.plain_result(
+            "（沉默了一会儿）苏桁……他已经很久没回来了。"
+            "他研究黎曼 ζ 函数——那个连 1+2+3+… 都等于 -1/12 的世界。"
+            "他临走前说，如果有一天他不在了，就让大家去他的网站上看看。"
+            "细节……有些事只能一对一地说，你私聊我，发送 /zeta。"
+        )
+
+    @filter.regex(r"网站|网址|入口")
+    async def site(self, event: AstrMessageEvent):
+        self._remember_group(event)
+        yield event.plain_result(
+            "他的网站入口？我只记得一个词：zeta。顺着那个词找吧。"
+            "拿到绑定码之后记得私聊我，发送 /zeta。"
+        )
 
     # ---------- 通关播报（轮询网页 /api/finished） ----------
 
@@ -128,158 +255,3 @@ class Main(Star):
             except Exception as e:
                 logger.error(f"[tick] 轮询失败: {e}")
             await asyncio.sleep(POLL_INTERVAL)
-
-    # ---------- 私聊指令（一次性 + 专属实时码） ----------
-
-    @filter.command("zeta", alias={"tick"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def zeta_help(self, event: AstrMessageEvent):
-        yield event.plain_result(
-            "汐月：你想知道苏桁的事？先按顺序来：\n"
-            "1. 在群里 @我，发送 /bind <绑定码>（绑定码去网页 /join 领取）；\n"
-            "2. 从网页 /zeta 开始解谜；\n"
-            "3. 卡关时私聊我 /hint N 领取一次性提示（需先通关前一关，每个提示只能看一次）；\n"
-            "4. /记忆库 /凭证 藏在后面，同样只有一次机会；\n"
-            "5. /进度 查看自己的通关进度。\n"
-            "每条提示都会带专属实时码——苏桁说，秘密只能一对一地说，说了就没了。"
-        )
-
-    @filter.command("hint", alias={"提示"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def hint_cmd(self, event: AstrMessageEvent, stage: int):
-        if not event.is_private_chat():
-            yield event.plain_result("这里说不出口。去私聊我。")
-            return
-        if stage < 1 or stage > 8:
-            yield event.plain_result("关卡号是 1 到 8。")
-            return
-        ret, err = await self._call(event, "/api/hint", {"stage": stage})
-        if err:
-            yield event.plain_result(err)
-            return
-        status = ret.get("status")
-        if status == "gated":
-            yield event.plain_result(f"不行哦，你还没通关第 {ret['need']} 关，不能要第 {stage} 关的提示。")
-        elif status == "consumed":
-            yield event.plain_result(f"第 {stage} 关的提示你已经看过了（一次性），它已经被回收了。")
-        else:
-            yield event.plain_result(self._fmt(ret, f"第 {stage} 关的提示："))
-
-    @filter.command("记忆库", alias={"frag5"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def memory_cmd(self, event: AstrMessageEvent):
-        if not event.is_private_chat():
-            yield event.plain_result("记忆库的事……只能在私聊里说。")
-            return
-        ret, err = await self._call(event, "/api/secret", {"channel": "mem"})
-        if err:
-            yield event.plain_result(err)
-            return
-        status = ret.get("status")
-        if status == "gated":
-            yield event.plain_result("记忆库……上锁了。苏桁说过，只有解开他前 4 道题的人，才能打开它。")
-        elif status == "consumed":
-            yield event.plain_result("记忆库你已经打开过一次了，它已经重新上锁了。")
-        else:
-            yield event.plain_result(self._fmt(ret, ""))
-
-    @filter.command("凭证", alias={"frag7"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def credential_cmd(self, event: AstrMessageEvent):
-        if not event.is_private_chat():
-            yield event.plain_result("口令不能在群里喊。私聊我。")
-            return
-        ret, err = await self._call(event, "/api/secret", {"channel": "cred"})
-        if err:
-            yield event.plain_result(err)
-            return
-        status = ret.get("status")
-        if status == "gated":
-            yield event.plain_result("口令……只有解开前 6 道题的人，才有资格知道。")
-        elif status == "consumed":
-            yield event.plain_result("凭证你已经验证过一次了，它不会再出现了。")
-        else:
-            yield event.plain_result(self._fmt(ret, ""))
-
-    @filter.command("彩蛋", alias={"hidden"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def egg_cmd(self, event: AstrMessageEvent, phrase: str):
-        if not event.is_private_chat():
-            yield event.plain_result("那封信……只能在私聊里读。")
-            return
-        if hashlib.md5(phrase.strip().encode("utf-8")).hexdigest() != FLAG_INNER:
-            yield event.plain_result("……不是这句话。四个字，再想想。")
-            return
-        ret, err = await self._call(event, "/api/secret", {"channel": "egg"})
-        if err:
-            yield event.plain_result(err)
-            return
-        if ret.get("status") == "consumed":
-            yield event.plain_result("那封信……你已经读过了。苏桁的话，只说一遍。")
-        else:
-            yield event.plain_result(self._fmt(ret, ""))
-
-    @filter.command("进度", alias={"progress"})
-    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
-    async def progress_cmd(self, event: AstrMessageEvent):
-        if not event.is_private_chat():
-            yield event.plain_result("你的进度，私聊里才能看。")
-            return
-        ret, err = await self._call(event, "/api/progress", {})
-        if err:
-            yield event.plain_result(err)
-            return
-        done = sorted(ret.get("stages", []))
-        line = " ".join(f"✓{s}" for s in done) if done else "还没有通关记录"
-        used = ret.get("used", [])
-        used_line = (" ｜ 已用：" + " ".join(used)) if used else ""
-        egg = " ｜ 彩蛋 ✓" if ret.get("egg") else ""
-        yield event.plain_result(
-            f"你的进度：{ret.get('count', 0)}/8 关 ｜ {line}{used_line}{' ｜ 终局 ✓' if ret.get('final') else ''}{egg}"
-        )
-
-    # ---------- 群内指令：绑定 ----------
-
-    @filter.command("bind", alias={"绑定"})
-    async def bind_cmd(self, event: AstrMessageEvent, code: str):
-        self._remember_group(event)
-        code = code.strip().lower()
-        qq = str(event.get_sender_id())
-        name = event.get_sender_name() or ""
-        ret = await self._api("/api/bind", {"player": code, "qq": qq, "name": name})
-        if ret and ret.get("ok"):
-            await self.put_kv_data(f"tick_qq_{qq}", code)
-            yield event.plain_result(f"绑定成功！{name}（{qq}）→ 绑定码 {code}。私聊我发送 /zeta 开始。")
-        else:
-            yield event.plain_result("绑定失败：这个绑定码不存在。先去网页 /join 领取绑定码，再回来绑定。")
-
-    # ---------- 群内拦截：敏感指令在群里一律无效（不消耗任何一次性凭证） ----------
-
-    @filter.regex(r"^(记忆库|凭证|彩蛋|hint|提示|进度|zeta|tick)\b")
-    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
-    async def group_block(self, event: AstrMessageEvent):
-        self._remember_group(event)
-        yield event.plain_result(
-            "这些指令只能在私聊里使用，在群里说了是无效的（也不会消耗你的次数）。"
-            "想聊剧情的话，随时可以 @我。"
-        )
-
-    # ---------- 群内剧情对话（不含任何答案/提示） ----------
-
-    @filter.regex(r"苏桁|ζ|黎曼")
-    async def lore(self, event: AstrMessageEvent):
-        self._remember_group(event)
-        yield event.plain_result(
-            "（沉默了一会儿）苏桁……他已经很久没回来了。"
-            "他研究黎曼 ζ 函数——那个连 1+2+3+… 都等于 -1/12 的世界。"
-            "他临走前说，如果有一天他不在了，就让大家去他的网站上看看。"
-            "细节……有些事只能一对一地说，你私聊我，发送 /zeta。"
-        )
-
-    @filter.regex(r"网站|网址|入口")
-    async def site(self, event: AstrMessageEvent):
-        self._remember_group(event)
-        yield event.plain_result(
-            "他的网站入口？我只记得一个词：zeta。顺着那个词找吧。"
-            "拿到绑定码之后记得私聊我，发送 /zeta。"
-        )
