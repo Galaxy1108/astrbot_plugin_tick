@@ -756,6 +756,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "text/html; charset=utf-8",
                 )
             ensure_frags(p)
+            if stage > 1:
+                missing = next((i for i in range(1, stage) if not p["stages"].get(str(i))), None)
+                if missing is not None:
+                    return self._send(
+                        f"<span class='err'>❌ 跳关啦。</span> 要先完成第 <b>{missing}</b> 关，才能确认第 {stage} 关的答案。",
+                        "text/html; charset=utf-8",
+                    )
             if ans != p["frags"][stage - 1]:
                 pre = f"（需先完成第 {stage-1} 关）" if stage > 1 else "（无需前置关卡）"
                 return self._send(
