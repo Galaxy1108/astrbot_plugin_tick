@@ -1022,7 +1022,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(page("真结局", true_body).encode())
         if fake_body is not None:
             # 提示区在锁外渲染，避免与 _hint_box 死锁
-            return self._send(page("终局", fake_body + self._hint_box(8, player)).encode())
+            return self._send(page("终局", fake_body).encode())
         err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
         body = f"""<div class="box"><p class="frag">访问码</p>
 <p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
