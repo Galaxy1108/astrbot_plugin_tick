@@ -122,19 +122,23 @@ class Main(Star):
 
     # ---------- 与网页服务器通信 ----------
 
-    async def _api(self, path: str, params: dict):
+    async def _api(self, path: str, params: dict, retries: int = 3):
+        """调用网页 API；失败自动重试（网页重启等瞬时故障不影响兑付）。"""
         base = str(self.config.get("web_base", "http://127.0.0.1:8080")).rstrip("/")
         token = str(self.config.get("admin_token", "tick-admin-9c4f2b7a1d"))
         params = dict(params)
         params["secret"] = token
         url = base + path + "?" + urllib.parse.urlencode(params)
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
-                async with session.get(url) as resp:
-                    return await resp.json()
-        except Exception as e:
-            logger.error(f"[tick] API 请求失败: {e}")
-            return None
+        for attempt in range(retries):
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+                    async with session.get(url) as resp:
+                        return await resp.json()
+            except Exception as e:
+                logger.error(f"[tick] API 请求失败(第{attempt + 1}次): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+        return None
 
     async def _bound_code(self, event: AstrMessageEvent) -> str | None:
         qq = event.get_sender_id()
