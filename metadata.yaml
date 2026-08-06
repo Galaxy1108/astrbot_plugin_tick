@@ -4,11 +4,12 @@ short_desc: ARG 剧情插件：汐月与苏桁的记忆
 desc: >
   ζ 计划（Project ZETA）ARG 剧情插件。汐月是故事里的 AI 角色，苏桁是研究黎曼 ζ 函数后失踪的数学家。
 
-  私聊指令：/zeta 玩法说明、/hint N 关卡提示（需完成前一关）、/记忆库（第5关）、/凭证（第7关）、/进度、/彩蛋。
+  私聊指令：/zeta 玩法说明、/submit 0x码 统一兑换（提示/记忆库/彩蛋）、/进度。
   群内指令：/bind <绑定码> 绑定玩家 QQ 身份（绑定码在网页 /join 领取）。
-  所有提示/答案仅在私聊发放，且按通关进度解锁；群内只保留剧情对话。
+  提示码每人每码唯一、无时间限制、用完即焚；发到群聊会被插件自动吊销。
+  第 8 关套话：私聊念出自己的碎片后，插件自动注入附加剧情扮演层（LLM 工具 verify_fragments 核对）。
   需要配套「ζ 计划」网页服务器（tick.py）使用。
-version: 2.1.0
+version: 2.1.1
 author: Galaxy1108
 repo: https://github.com/Galaxy1108/astrbot_plugin_tick
 tags:

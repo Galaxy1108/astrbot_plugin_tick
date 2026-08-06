@@ -19,30 +19,36 @@ from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Star
 from astrbot.core.agent.message import TextPart
 from astrbot.core.agent.run_context import ContextWrapper
-from astrbot.core.agent.tool import ToolExecResult
+from astrbot.core.agent.tool import FunctionTool, ToolExecResult
 from astrbot.core.astr_agent_context import AstrAgentContext
+from pydantic import Field
+from pydantic.dataclasses import dataclass
 
 POLL_INTERVAL = 30  # 秒
 
 CODE_RE = re.compile(r"(?:0x)?[0-9a-f]{5}(?![0-9a-f])")
 
 
-class VerifyFragmentsTool:
+@dataclass
+class VerifyFragmentsTool(FunctionTool[AstrAgentContext]):
     """第 8 关 LLM 工具：核对当前对话者声称收集到的碎片是否正确。"""
 
-    name = "verify_fragments"
-    description = "核对该玩家声称收集到的 ζ 计划碎片。把玩家说出的碎片列表传进来，返回其中正确的数量（至少 3 个才算真的走完了前七关）。"
-    parameters = {
-        "type": "object",
-        "properties": {
-            "keys": {"type": "array", "items": {"type": "string"},
-                     "description": "玩家说出的碎片编号列表"},
-        },
-        "required": ["keys"],
-    }
-
-    def __init__(self, star: "Main"):
-        self.star = star
+    name: str = "verify_fragments"
+    description: str = (
+        "核对该玩家声称收集到的 ζ 计划碎片。把玩家说出的碎片列表传进来，"
+        "返回其中正确的数量（至少 3 个才算真的走完了前七关）。"
+    )
+    parameters: dict = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "keys": {"type": "array", "items": {"type": "string"},
+                         "description": "玩家说出的碎片编号列表"},
+            },
+            "required": ["keys"],
+        }
+    )
+    star: "Main" = None  # 插件实例，__init__ 时注入
 
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
         try:
@@ -50,16 +56,15 @@ class VerifyFragmentsTool:
             qq = str(event.get_sender_id())
             bind = await self.star.get_kv_data(f"tick_qq_{qq}", None)
             if not bind:
-                return ToolExecResult("无法验证：对方没有绑定玩家身份。")
+                return "无法验证：对方没有绑定玩家身份。"
             keys = kwargs.get("keys") or []
             ret = await self.star._api("/api/verify", {"player": bind, "keys": ",".join(keys)})
             if not ret or not ret.get("ok"):
-                return ToolExecResult("验证服务暂时不可用，稍后再试。")
-            n = ret.get("match", 0)
-            return ToolExecResult(f"核对结果：{n}/7 个碎片正确。")
+                return "验证服务暂时不可用，稍后再试。"
+            return f"核对结果：{ret.get('match', 0)}/7 个碎片正确。"
         except Exception as e:
             logger.error(f"[tick] verify_fragments 工具出错: {e}")
-            return ToolExecResult("核对失败，稍后再试。")
+            return "核对失败，稍后再试。"
 
 # 第 8 关「套话」：私聊 + 完成前 7 关 + 在对话里念出至少 3 个自己的碎片，才注入人格扩展区域。
 # 注入被框定为「附加剧情扮演层」，不改变汐月的人设、记忆与性格；对每个新人都像从没人问过。
