@@ -1035,7 +1035,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>便签背面只有一行字：</p>
 <p><b>上面这串 32 位十六进制，是某个四位字符的不可逆摘要。</b></p>
 <p>汐月已经给了你前两位——把后两位补上，试着枚举，直到摘要对上。</p>
-<p>（一位十六进制 16 种可能，两位一共 256 种，写几行代码或者用在线工具都行）</p>
 <p style="font-size:12px;color:#6b7683">（每个玩家的便签都不一样——这扇门只认你。）</p>
 </div>
 <a href="/stage5" style="font-size:13px">← 返回第 5 关</a>"""
