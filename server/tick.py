@@ -51,7 +51,7 @@ HINT_UNLOCK = {-1: 60, 0: 300, 1: 1200, 2: None}
 FINAL_KEY = None  # 每人一套碎片，最终访问码按玩家动态计算
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
 FLAG = f"flag{{{FLAG_INNER}}}"
-FAKE_FLAG = "flag{3e79be0507b8e8d29948be61e0432637}"  # md5("我喜欢你。")——假结局诱饵
+FAKE_FLAG = "flag{179c71df54755fdff23401fa9132f7c2}"  # md5("iloy")——假结局诱饵；撞库得 ILOY
 
 # 每人碎片生成用常数
 ZETA3_DIGITS = "2020569031595942853997381615114499907649862923404988"  # ζ(3) 小数位（权威值 50 位）
@@ -177,7 +177,7 @@ def render_hint(p: dict, stage: int, level: int) -> str:
     return [
         "网页上没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。",
         "先证明自己：私聊告诉她你在 /final 拿到的那个 flag{…}（她会核对）。然后，她等的那句话，也许就藏在你那个 flag 里——苏桁把一句四个字的真心话摘要成了它。",
-        "私聊报出你在 /final 拿到的 flag{…}（她会核对）。解开那个 flag（md5 撞库）会得到四个字——「我喜欢你」。把这句话说给她听，她心里藏着的那串数字，会亲口念给你。",
+        "私聊报出你在 /final 拿到的 flag{…}（她会核对）。解开那个 flag（md5 撞库）会得到四个字母——「ILOY」（我喜欢你的首字母）。把这句话说给她听，她心里藏着的那串数字，会亲口念给你。",
     ][level]
 
 SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
@@ -1022,7 +1022,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(page("真结局", true_body).encode())
         if fake_body is not None:
             # 提示区在锁外渲染，避免与 _hint_box 死锁
-            return self._send(page("终局", fake_body).encode())
+            return self._send(page("终局", fake_body + self._hint_box(8, player)).encode())
         err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
         body = f"""<div class="box"><p class="frag">访问码</p>
 <p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
