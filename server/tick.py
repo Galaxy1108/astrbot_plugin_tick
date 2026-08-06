@@ -46,7 +46,7 @@ COOKIE_NAME = "tick_player"
 
 # 提示码规则：无时间限制、手动点击生成、用完即焚；发到群聊会被立即吊销（需重新生成/申请）
 # 三层提示解锁策略：第1层等 5 分钟，第2层等 20 分钟（自首次查看本关起算），第3层需管理员审批
-HINT_UNLOCK = {0: 300, 1: 1200, 2: None}
+HINT_UNLOCK = {-1: 60, 0: 300, 1: 1200, 2: None}
 
 FINAL_KEY = None  # 每人一套碎片，最终访问码按玩家动态计算
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
@@ -104,6 +104,13 @@ HIDDEN_LETTER = """汐月：
 # 每关 3 层提示（按玩家渲染，答案级提示含个人碎片）
 HINT_LABELS = ["第一层", "第二层", "第三层"]
 
+MICRO_HINTS = {
+    4: "那张图，可能不止是一张图。",
+    5: "答案被分成了两半。",
+    6: "你的标记，藏在一条很长的数字链里。",
+    7: "那段沙沙声，其实是有节奏的。",
+}
+
 
 def hexbytes(frag: str) -> str:
     """把 4 位 hex 转成 ASCII 字节序列，如 '66b2' -> '36 36 62 32'。"""
@@ -117,7 +124,9 @@ def frag_reading(frag: str) -> str:
 
 
 def render_hint(p: dict, stage: int, level: int) -> str:
-    """渲染第 stage 关第 level 层提示（含个人碎片参数）。"""
+    """渲染第 stage 关第 level 层提示（含个人碎片参数）；level=-1 为微提示。"""
+    if level == -1:
+        return MICRO_HINTS.get(stage, "再仔细看看这一关的页面。")
     import base64 as _b64
     f = p["frags"]
     m = p["frag_meta"]
@@ -289,8 +298,8 @@ def stage_body(p: dict, stage: int) -> str:
         return f"""
 <div class="box">
 <p>苏桁的收藏里有一张他手绘的 ζ 函数草图：<a href="/static/zeta.png">ζ 草图.png</a>。</p>
-<p>它比看上去的要多一点东西——里面有 8 个编号的信息块（t1~t8）。</p>
-<p>用<b>文本编辑器</b>（记事本也行）打开它，找到编号 <b>t{m['p4']}</b> 的块，那就是碎片 4。</p>
+<p>它比看上去的要多一点东西——里面藏着 8 个编号的信息块（t1~t8）。</p>
+<p>你的碎片在第 <b>t{m['p4']}</b> 块。</p>
 </div>
 """
     if stage == 5:
@@ -299,7 +308,7 @@ def stage_body(p: dict, stage: int) -> str:
 <p>苏桁的 AI「汐月」还活着。苏桁把最重要的一串字符锁进了汐月的记忆库里——但记忆库的钥匙分成了两半。</p>
 <p>要打开它，你需要一个<b>记忆库开启码</b>——它在下方「专属提示码」区域。</p>
 <p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;记忆库开启码&gt;</code>，她会给你一半。</p>
-<p>另一半：汐月提到过，苏桁把备份藏在一个叫<b>「保险库」</b>的页面里——路径是它的英文名。</p>
+<p>另一半，苏桁把它藏在了服务器的某个地方。</p>
 </div>
 """
     if stage == 6:
@@ -311,19 +320,18 @@ def stage_body(p: dict, stage: int) -> str:
   '九九九九九九，如此下去，直到最后。'」</pre>
 <p>他在页脚又补了一句：<b>「每个人的 π，都不一样。」</b></p>
 <p>你的标记：<b>{m['m6']}</b></p>
-<p>在 π 的小数展开里找到它<b>第一次出现</b>的位置——它<b>后面</b>的 4 位，就是碎片 6。</p>
+<p>找到它<b>第一次出现</b>的地方——它<b>旁边</b>的 4 位，就是碎片 6。</p>
 </div>
 """
     return """
 <div class="box">
 <p>苏桁的旧录音笔里只留下一段沙沙声：<a href="/static/beep.wav">录音.wav</a>（7 秒）。</p>
-<p>有人说那是他最后的密码。用耳朵听，或者用 Audacity 看波形。</p>
+<p>有人说那是他最后的密码。</p>
 </div>
 """ + f"""
 <div class="box">
-<p>摩斯电码解出的四位数是共享的：0888。</p>
-<p>但苏桁给每个人都加了一把偏移锁——你的偏移量是 <b>{m['o7']}</b>。</p>
-<p>把 0888 的<b>每一位</b>数字都加上 {m['o7']}（超过 9 就减 10），得到的就是碎片 7。</p>
+<p>录音里藏着一段四位数。苏桁给每个人都加了一把偏移锁——你的偏移量是 <b>{m['o7']}</b>。</p>
+<p>把那段四位数的<b>每一位</b>数字都加上 {m['o7']}（超过 9 就减 10），得到的就是碎片 7。</p>
 </div>
 """
 
@@ -332,7 +340,7 @@ def code_label(entry):
     """把一次性码记录翻译成可读标签。"""
     kind = entry["kind"]
     if kind == "h":
-        return f"第{entry['stage']}关·{HINT_LABELS[entry['level']]}"
+        return f"第{entry['stage']}关·{'微提示' if entry['level'] == -1 else HINT_LABELS[entry['level']]}"
     return {"mem": "记忆库", "cred": "凭证", "egg": "彩蛋"}.get(kind, kind)
 
 
@@ -512,6 +520,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 first = now
                 p["hint_gen"][str(stage)] = now
             lines = []
+            if stage in MICRO_HINTS:
+                micro_wait = 60
+                if now >= first + micro_wait:
+                    lines.append(f"<p>微提示：{code_line(p, 'h', stage, -1, f'/generate?stage={stage}&lv=-1')}</p>")
+                else:
+                    secs = max(1, first + micro_wait - now)
+                    lines.append(f"<p>微提示：<span style='color:#6b7683'>「我毫无头绪」将在 {secs} 秒后解锁</span></p>")
             for lv in range(3):
                 gen_url = f"/generate?stage={stage}&lv={lv}"
                 wait = HINT_UNLOCK.get(lv)
@@ -543,7 +558,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extra = f"<p style='color:#ffd479'>记忆库开启码：{code_line(p, 'mem', 5, None, '/generate?stage=5&kind=mem')}</p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>提示码<b>手动生成</b>：第 1 层等 5 分钟、第 2 层等 20 分钟后可点「生成」，第 3 层申请后由管理员审批。</p>
+<p>「我毫无头绪」微提示 1 分钟解锁；第 1 层等 5 分钟、第 2 层等 20 分钟后可点「生成」，第 3 层申请后由管理员审批。</p>
 <p>码无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。</p>
 {''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
@@ -783,7 +798,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     lv = int(qs.get("lv", ["0"])[0])
                 except ValueError:
                     return self._send("参数错误", "text/plain")
-                if stage not in (1, 2, 3, 4, 5, 6, 7, 8) or lv not in (0, 1, 2):
+                if stage not in (1, 2, 3, 4, 5, 6, 7, 8) or lv not in (-1, 0, 1, 2):
                     return self._send("参数错误", "text/plain")
                 wait = HINT_UNLOCK.get(lv)
                 if wait is not None:
@@ -1248,7 +1263,7 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 if stage - 1 > mx:
                     return self._json({"ok": True, "status": "gated", "need": stage - 1})
                 text = render_hint(p, stage, level)
-                label = f"第{stage}关·{HINT_LABELS[level]}"
+                label = f"第{stage}关·{'微提示' if level == -1 else HINT_LABELS[level]}"
             else:
                 need = SECRET_GATES.get(kind)
                 if need is not None:
