@@ -172,6 +172,11 @@ def render_hint(p: dict, stage: int, level: int) -> str:
 
 SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
 
+
+def now_ms() -> int:
+    """事件时间戳用毫秒，避免同秒事件与轮询指针碰撞。"""
+    return int(time.time() * 1000)
+
 def secret_text(kind: str, p: dict) -> str:
     """按玩家渲染秘密内容（记忆库只给前两位，另一半在 /vault）。"""
     if kind == "mem":
@@ -890,7 +895,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             already = bool(p["stages"].get(str(stage)))
             p["stages"][str(stage)] = True
             if not already:
-                p["stage_ts"][str(stage)] = now  # 首次通过才产生事件/通知
+                p["stage_ts"][str(stage)] = now_ms()  # 首次通过才产生事件/通知
             p["last"] = now
             count, _ = player_progress(p)
             save_state()
@@ -918,7 +923,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if key == true_key:
                 now = int(time.time())
                 p["final"] = True
-                p["final_ts"] = now
+                p["final_ts"] = now_ms()
                 p["last"] = now
                 save_state()
                 note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
@@ -984,7 +989,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with LOCK:
             p = STATE["players"][player]
             p["egg"] = True
-            p["egg_ts"] = int(time.time())
+            p["egg_ts"] = now_ms()
             p["last"] = int(time.time())
             save_state()
         body = f"""<div class="box"><p class="ok">✅ 你找到了那句真心话。</p>
@@ -1054,13 +1059,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if qs.get("approve"):
                         issue_code(p, "h", stage, 2)
                         p.setdefault("hint_req", {})[str(stage)] = {
-                            "ts": int(time.time()), "status": "approved", "approved_ts": int(time.time())}
+                            "ts": int(time.time()), "status": "approved", "approved_ts": now_ms()}
                         flash = f"已批准 {target} 的第 {stage} 关第三层提示。"
                     else:
                         reason = qs.get("reason", [""])[0].strip()[:100]
                         p.setdefault("hint_req", {})[str(stage)] = {
                             "ts": int(time.time()), "status": "rejected",
-                            "rejected_ts": int(time.time()), "reason": reason}
+                            "rejected_ts": now_ms(), "reason": reason}
                         flash = f"已驳回 {target} 的第 {stage} 关申请。"
                     save_state()
         if acted:
@@ -1254,7 +1259,7 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 label = {"mem": "记忆库", "cred": "凭证", "egg": "彩蛋"}.get(kind, kind)
                 if kind == "egg":
                     p["egg"] = True
-                    p["egg_ts"] = now
+                    p["egg_ts"] = now_ms()
             entry["used"] = True
             p["last"] = now
             save_state()
@@ -1405,12 +1410,10 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                                        "stage": int(st), "ts": r["rejected_ts"],
                                        "reason": r.get("reason", "")})
             events.sort(key=lambda e: e["ts"])
-            # 推进并持久化通知指针（+1 保证同秒事件不丢失也不重放）
+            # 推进并持久化通知指针（毫秒 +1；空轮询不推进，避免吞掉新事件）
             if events:
                 STATE["notify_last"] = events[-1]["ts"] + 1
-            else:
-                STATE["notify_last"] = after + 1
-            save_state()
+                save_state()
         return self._json({"ok": True, "events": events})
 
     def _handle_api_stats(self, qs):
