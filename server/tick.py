@@ -140,8 +140,8 @@ def render_hint(p: dict, stage: int, level: int) -> str:
         b64 = _b64.b64encode(f[1].encode()).decode()
         return [
             "服务器礼仪：先去访问 /robots.txt 看看。",
-            f"/robots.txt 会指向 /secret，那里有一串 base64：{b64}",
-            f"把 {b64} 做 base64 解码，得到 {f[1]}。",
+            f"/robots.txt 会指向 /secret，那里有一张图——值藏在图的源代码里（查看网页源代码，或把图存下来用文本编辑器打开）。",
+            f"把图存下来用文本编辑器打开，找到 {b64}，base64 解码得到 {f[1]}。",
         ][level]
     if stage == 3:
         return [
@@ -270,6 +270,17 @@ if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').st
 </body></html>"""
 
 
+def secret_svg(b64: str) -> str:
+    """第 2 关：内嵌 SVG，碎片 2 的 base64 藏在低可见度文字节点里（查页面源代码可见）。"""
+    return """<svg xmlns="http://www.w3.org/2000/svg" width="360" height="180" viewBox="0 0 360 180">
+  <rect width="360" height="180" fill="#0e1116"/>
+  <path d="M 20 150 C 70 135, 110 125, 150 105 S 250 45, 340 14" stroke="#6ee7a0" stroke-width="2" fill="none"/>
+  <circle cx="150" cy="105" r="3.5" fill="#22c55e"/>
+  <text x="18" y="26" font-family="monospace" font-size="12" fill="#1a222c">{b64}</text>
+  <text x="300" y="166" font-family="monospace" font-size="10" fill="#16202a">f(x) = x + 1/x</text>
+</svg>""".format(b64=b64)
+
+
 def stage_body(p: dict, stage: int) -> str:
     """按玩家渲染关卡正文（含个人碎片参数）。"""
     import base64 as _b64
@@ -288,9 +299,8 @@ def stage_body(p: dict, stage: int) -> str:
         b64 = _b64.b64encode(f[1].encode()).decode()
         return f"""
 <div class="box">
-<p>你通过了 robots.txt 的指引找到了这个目录。苏桁留下了一句话，但显然他不想让人一眼看懂：</p>
-<pre>{b64}</pre>
-<p>把它解开，就是碎片 2。</p>
+<p>你通过了 robots.txt 的指引找到了这个目录。苏桁只留下了一张图：</p>
+{secret_svg(b64)}
 </div>
 """
     if stage == 3:
