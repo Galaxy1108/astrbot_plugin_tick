@@ -325,6 +325,8 @@ def load_state():
         except Exception:
             STATE = {"players": {}}
     STATE.setdefault("players", {})
+    # 通知指针持久化在网页端文件里：插件重装/指针丢失也不重放
+    STATE.setdefault("notify_last", 0)
 
 
 def save_state():
@@ -1212,16 +1214,17 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
 
     def _handle_api_events(self, qs):
         """供插件轮询：返回 after 之后的全部事件（逐关通关/终局/彩蛋/审批），按时间排序。
-        窗口限制为最近 24 小时，防止插件重装后 KV 归零导致旧事件重放。"""
+        通知指针持久化在网页端数据文件（notify_last）：
+        即使插件重装/指针丢失，也会被网页端的持久指针钳制，绝不重放。"""
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
             return self._json({"ok": False, "err": "bad secret"}, 403)
         try:
             after = int(qs.get("after", ["0"])[0])
         except ValueError:
             after = 0
-        after = max(after, int(time.time()) - 86400)
-        events = []
         with LOCK:
+            after = max(after, STATE.get("notify_last", 0))
+            events = []
             for player, p in STATE["players"].items():
                 qq, name = p.get("qq"), p.get("name")
                 for st, ts in (p.get("stage_ts") or {}).items():
@@ -1243,7 +1246,13 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                         events.append({"type": "hint_rejected", "player": player, "qq": qq, "name": name,
                                        "stage": int(st), "ts": r["rejected_ts"],
                                        "reason": r.get("reason", "")})
-        events.sort(key=lambda e: e["ts"])
+            events.sort(key=lambda e: e["ts"])
+            # 推进并持久化通知指针
+            if events:
+                STATE["notify_last"] = events[-1]["ts"]
+            else:
+                STATE["notify_last"] = max(after, STATE.get("notify_last", 0))
+            save_state()
         return self._json({"ok": True, "events": events})
 
     def _handle_api_stats(self, qs):
