@@ -243,6 +243,7 @@ button { background:#22c55e; color:#04120a; border:none; border-radius:6px; padd
 button:hover { background:#4ade80; }
 .frag { font-family:monospace; font-size:15px; color:#6ee7a0; letter-spacing:2px; }
 table { border-collapse:collapse; width:100%; font-size:13px; }
+.tblwrap { overflow-x:auto; }
 th,td { border:1px solid #2a313c; padding:6px 8px; text-align:left; }
 th { background:#161b22; }
 .done { color:#6ee7a0; }
@@ -1330,7 +1331,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 onclick="return confirm('确认清空全部玩家数据？此操作不可撤销！')">清空全部玩家</a></p></div>
 {decode_html}
 <div class="box">
-<table>{head}{''.join(lines)}</table>
+<div class="tblwrap"><table>{head}{''.join(lines)}</table></div>
 <p style="font-size:12px;color:#6b7683">API: /api/stats?secret=… ｜ /api/decode?code=…&secret=…</p>
 </div>"""
         return self._send(page("进度面板 · GM", body).encode())
