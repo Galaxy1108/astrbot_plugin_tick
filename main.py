@@ -403,7 +403,7 @@ class Main(Star):
             if etype == "stage":
                 text = f"通关快报：{name}（{qq}）通过了第 {e['stage']} 关！"
             elif etype == "final":
-                dur = max(1, ts - (e.get("created") or ts))
+                dur = max(1, ts - (e.get("created") or ts)) // 1000  # ms → 秒
                 minutes = dur // 60
                 hours = minutes // 60
                 dur_text = f"{hours} 小时 {minutes % 60} 分" if hours else f"{minutes} 分钟"

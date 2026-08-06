@@ -993,7 +993,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if key == true_key:
                 now = int(time.time())
                 p["final"] = True
-                p["final_ts"] = now_ms()
+                if not p.get("final_ts"):
+                    p["final_ts"] = now_ms()  # 仅首次通关记录，重复提交不产生新事件
                 p["last"] = now
                 save_state()
                 note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
@@ -1008,7 +1009,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif key == fake_key:
                 now = int(time.time())
                 p["fake"] = True
-                p["fake_ts"] = now_ms()  # 事件时间戳必须毫秒，否则永远小于轮询指针
+                if not p.get("fake_ts"):
+                    p["fake_ts"] = now_ms()  # 仅首次记录，重复提交不产生新事件
                 p["last"] = now
                 save_state()
                 fake_body = f"""<div class="box">
