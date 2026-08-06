@@ -1245,7 +1245,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             unlock_rows.append(
                                 f"<tr><td>{st}</td><td>{HINT_LABELS[lv]}</td><td>{status}</td><td>{act or '—'}</td></tr>")
                     decode_html = f"""<div class="box"><p class="frag">玩家 {qs['view'][0]} 详情</p>
-<p>QQ：{vp.get('qq') or '—'} ｜ 昵称：{vp.get('name') or '—'} ｜ 进度：{player_progress(vp)[0]}/8</p>
+<p>QQ：{vp.get('qq') or '—'} ｜ 昵称：{vp.get('name') or '—'} ｜ 进度：{player_progress(vp)[0]}/8 ｜ 碎片8：{"<span class='done'>已找到</span>" if vp.get("frag8_found") else "<span class='todo'>未找到</span>"}{(" ｜ 找到时间：" + time.strftime("%m-%d %H:%M", time.localtime(vp["frag8_ts"] / 1000))) if vp.get("frag8_ts") else ""}</p>
 <p>碎片：<code>{frags}</code></p>
 <p class="frag" style="font-size:13px">提示解锁状态（GM 可跳过冷却 / 直接批准）</p>
 <table><tr><th>关</th><th>层</th><th>状态</th><th>操作</th></tr>{''.join(unlock_rows)}</table>
@@ -1306,7 +1306,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             used_cell = f"已用 {used_count}" if used_count else "—"
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
-                f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
+                f"<td>{count}/8</td>{cells}"
+                f"<td class='{"done" if p.get("frag8_found") else "todo"}'>{"✓" if p.get("frag8_found") else "·"}</td>"
+                f"<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
                 f"<td style='font-size:11px'>{used_cell}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td>"
@@ -1316,7 +1318,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
                 + "".join(f"<th>{i}</th>" for i in range(1, 9))
-                + "<th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
+                + "<th>碎片8</th><th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
         body = f"""{flash}{pending_html}<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关真结局：{sum(1 for _, p in rows if p['final'])} ｜ 到达假结局：{sum(1 for _, p in rows if p.get('fake'))} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 5 位一次性码，定位是哪个玩家、哪条内容、什么时间。</p>
