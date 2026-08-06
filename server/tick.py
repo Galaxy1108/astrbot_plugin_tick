@@ -435,6 +435,8 @@ def new_player():
                 "fake_ts": None,
                 "egg": False,
                 "egg_ts": None,
+                "frag8_found": False,
+                "frag8_ts": None,
                 "last": int(time.time()),
             }
             save_state()
@@ -746,6 +748,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/verify":
             return self._handle_api_verify(qs)
 
+        if path == "/api/mark_frag8":
+            return self._handle_api_mark_frag8(qs)
         if path == "/api/verify_flag":
             return self._handle_api_verify_flag(qs)
 
@@ -1408,6 +1412,7 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 "final": p["final"],
                 "fake": p.get("fake", False),
                 "egg": p.get("egg", False),
+                "frag8_found": p.get("frag8_found", False),
                 "used": used,
                 "frags": p["frags"],
             })
@@ -1525,6 +1530,9 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 if p.get("fake_ts") and p["fake_ts"] >= after:
                     events.append({"type": "fake", "player": player, "qq": qq, "name": name,
                                    "ts": p["fake_ts"]})
+                if p.get("frag8_ts") and p["frag8_ts"] >= after:
+                    events.append({"type": "frag8", "player": player, "qq": qq, "name": name,
+                                   "ts": p["frag8_ts"]})
                 for st, r in (p.get("hint_req") or {}).items():
                     if r.get("status") == "approved" and r.get("approved_ts", 0) >= after:
                         events.append({"type": "hint_approved", "player": player, "qq": qq, "name": name,
@@ -1539,6 +1547,26 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 STATE["notify_last"] = events[-1]["ts"] + 1
                 save_state()
         return self._json({"ok": True, "events": events})
+
+    def _handle_api_mark_frag8(self, qs):
+        """AI 念出第 8 块碎片后调用：标记已找到（仅首次），产生 frag8 事件。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            _, mx = player_progress(p)
+            if mx < 7:
+                return self._json({"ok": False, "err": "gated", "need": 7})
+            first = not p.get("frag8_found")
+            p["frag8_found"] = True
+            if first:
+                p["frag8_ts"] = now_ms()  # 仅首次记录，避免重复事件
+            p["last"] = int(time.time())
+            save_state()
+            return self._json({"ok": True, "first": first, "frag8": p["frags"][7]})
 
     def _handle_api_verify_flag(self, qs):
         """套话验证：核对玩家声称在服务器上拿到的 flag（= 假结局那个）。"""
