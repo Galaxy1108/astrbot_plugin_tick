@@ -209,7 +209,7 @@ def secret_text(kind: str, p: dict) -> str:
                 f"后面两个，苏桁说存在服务器上一个叫 vault 的页面里——那是他的保险库。")
     if kind == "egg":
         return (f"「{FLAG_INNER}」——这串十六进制，是苏桁一句四字真心话的摘要。"
-                f"猜出那四个字，去 /hidden?key=你猜到的四个字 认领。")
+                f"猜出那四个字，去 /hidden 认领。")
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/stage2", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
@@ -1386,10 +1386,7 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                         return self._json({"ok": True, "status": "gated", "need": need})
                 text = secret_text(kind, p)
                 label = {"mem": "记忆库", "cred": "凭证", "egg": "彩蛋"}.get(kind, kind)
-                if kind == "egg":
-                    p["egg"] = True
-                    if not p.get("egg_ts"):
-                        p["egg_ts"] = now_ms()  # 仅首次解锁记录，重复触发不产生新事件
+                # 彩蛋兑码只作为引导，不标记找到：只有 /hidden 输对密码才触发彩蛋状态/播报
             entry["used"] = True
             p["last"] = now
             save_state()
