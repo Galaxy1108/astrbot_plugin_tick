@@ -613,25 +613,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_join(self, qs):
         code = qs.get("code", [""])[0].strip().lower()
         with LOCK:
-            if code:
-                if code not in STATE["players"]:
-                    return self._send(page("绑定码无效", "<div class='box'><p class='err'>这个绑定码不存在。</p><p><a href='/join'>重新领取</a></p></div>").encode())
-                count, _ = player_progress(STATE["players"][code])
-                extra = f"<p>已绑定 QQ：{STATE['players'][code]['qq'] or '未绑定'} ｜ 已通关 {count}/8 关</p>"
-            else:
-                code = new_player()
-                extra = ""
+            if not code:
+                # 已有绑定身份的访客：恢复身份，绝不重复创建
+                existing = self._cookie_player()
+                if existing and existing in STATE["players"]:
+                    code = existing
+                else:
+                    code = new_player()
+            if code not in STATE["players"]:
+                return self._send(page("绑定码无效", "<div class='box'><p class='err'>这个绑定码不存在。</p><p><a href='/join'>重新领取</a></p></div>").encode())
+            count, _ = player_progress(STATE["players"][code])
+            extra = f"<p>已绑定 QQ：{STATE['players'][code]['qq'] or '未绑定'} ｜ 已通关 {count}/8 关 ｜ 身份恢复/保留中，不会重置。</p>"
         body = f"""<div class="box">
 <p class="frag">你的绑定码：{code}</p>
 <p>把它记住，然后按下面 3 步走：</p>
 <ol>
 <li>回到群里，@汐月 发送 <code>/bind {code}</code>（绑定你的 QQ 身份）；</li>
 <li><b>私聊</b>汐月，发送 <code>/zeta</code> 查看玩法说明；</li>
-<li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/submit 0x&lt;码&gt;</code> 兑换
-（每人每码只能用一次，10 分钟有效）。</li>
+<li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/submit 0x&lt;码&gt;</code> 兑换（每人每码只能用一次）。</li>
 </ol>
 {extra}
-<p style="color:#6b7683">绑定码丢失？再访问 /join 输入绑定码即可恢复。</p>
+<p style="color:#6b7683">不小心又进了 /join？没关系——身份不会重置，这里始终显示你原来的绑定码和进度。换设备/清 cookie 后，回 /join 输入绑定码即可恢复；绑定码彻底忘了就私聊汐月发送 <code>/找回</code>。</p>
 </div>
 <a href="/zeta" style="font-size:13px">← 返回第 1 关</a>"""
         return self._send(

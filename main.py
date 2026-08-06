@@ -207,6 +207,19 @@ class Main(Star):
         else:
             yield event.plain_result("这不是有效的码。它只属于你，别人的码用不了——回网页重新生成一个吧。")
 
+    @filter.command("找回", alias={"recover"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def recover_cmd(self, event: AstrMessageEvent):
+        if not event.is_private_chat():
+            yield event.plain_result("私聊里才能说。")
+            return
+        qq = str(event.get_sender_id())
+        code = await self.get_kv_data(f"tick_qq_{qq}", None)
+        if not code:
+            yield event.plain_result("你还没有绑定过玩家身份。先去网页 /join 领取绑定码，再在群里 @我发送 /bind <绑定码>。")
+            return
+        yield event.plain_result(f"你的绑定码是：{code}。回网页 /join 输入它即可恢复进度。")
+
     @filter.command("进度", alias={"progress"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def progress_cmd(self, event: AstrMessageEvent):
