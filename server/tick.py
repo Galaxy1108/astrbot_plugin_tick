@@ -859,6 +859,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
         flash = ""
         with LOCK:
+            if qs.get("del"):
+                target = qs.get("del", [""])[0]
+                if target in STATE["players"]:
+                    del STATE["players"][target]
+                    save_state()
+                    flash = f"<div class='box'><p class='ok'>已删除玩家 {target}。</p></div>"
+            if qs.get("reset", [""])[0] == "1":
+                STATE["players"] = {}
+                save_state()
+                flash = "<div class='box'><p class='ok'>已清空全部玩家数据。</p></div>"
             if qs.get("approve") or qs.get("reject"):
                 target = (qs.get("approve") or qs.get("reject") or [""])[0]
                 try:
@@ -915,6 +925,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
             pending_html = f"""<div class="box"><p class="frag">第三层提示审批（{len(pending)} 个待处理）</p>
 <table><tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>关卡</th><th>申请时间</th><th>操作</th></tr>{prow}</table></div>"""
+        else:
+            pending_html = """<div class="box"><p class="frag">第三层提示审批</p>
+<p style="color:#6b7683">暂无待审批申请。玩家在关卡页点击「申请」（第三层提示）后，会出现在这里。</p></div>"""
         lines = []
         for code, p in rows:
             count, mx = player_progress(p)
@@ -928,17 +941,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
                 f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
                 f"<td style='font-size:11px'>{used}</td>"
-                f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td></tr>"
+                f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td>"
+                f"<td><a href='/admin?pass={ADMIN_TOKEN}&del={code}' style='color:#ff6b6b' "
+                f"onclick=\"return confirm('确认删除玩家 {code}？')\">删除</a></td></tr>"
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
                 + "".join(f"<th>{i}</th>" for i in range(1, 9))
-                + "<th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th></tr>")
+                + "<th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th><th>操作</th></tr>")
         body = f"""{flash}{pending_html}<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关真结局：{sum(1 for _, p in rows if p['final'])} ｜ 到达假结局：{sum(1 for _, p in rows if p.get('fake'))} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 5 位一次性码，定位是哪个玩家、哪条内容、什么时间。</p>
 <form method="get"><input type="hidden" name="pass" value="{ADMIN_TOKEN}">
 <input type="text" name="code" placeholder="5 位一次性码" style="width:180px">
-<button>解码</button></form></div>
+<button>解码</button></form>
+<p><a href="/admin?pass={ADMIN_TOKEN}&reset=1" style="color:#ff6b6b"
+onclick="return confirm('确认清空全部玩家数据？此操作不可撤销！')">清空全部玩家</a></p></div>
 {decode_html}
 <div class="box">
 <table>{head}{''.join(lines)}</table>
