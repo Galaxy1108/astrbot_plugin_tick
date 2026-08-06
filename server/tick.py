@@ -861,6 +861,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
         flash = ""
         with LOCK:
+            if qs.get("skip"):
+                target = qs.get("skip", [""])[0]
+                try:
+                    stage = int(qs.get("stage", ["0"])[0])
+                    lv = int(qs.get("lv", ["0"])[0])
+                except ValueError:
+                    stage, lv = 0, 0
+                p = STATE["players"].get(target)
+                wait = HINT_UNLOCK.get(lv)
+                if p and stage in (1, 2, 3, 4, 5, 6, 7, 8) and wait is not None:
+                    p.setdefault("hint_gen", {})[str(stage)] = int(time.time()) - wait
+                    save_state()
+                    flash = f"<div class='box'><p class='ok'>已为 {target} 跳过第 {stage} 关{HINT_LABELS[lv]}冷却。</p></div>"
             if qs.get("del"):
                 target = qs.get("del", [""])[0]
                 if target in STATE["players"]:
@@ -894,6 +907,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 vp = STATE["players"].get(qs.get("view", [""])[0])
                 if vp:
                     ensure_frags(vp)
+                    now = int(time.time())
                     rows_v = sorted((vp.get("hintcodes") or {}).items(),
                                     key=lambda kv: (kv[1].get("used"), kv[1]["gen"]))
                     ledger = "".join(
@@ -904,9 +918,43 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         for c, e in rows_v
                     )
                     frags = " ".join(vp["frags"])
+                    unlock_rows = []
+                    for st in range(1, 9):
+                        first = (vp.get("hint_gen") or {}).get(str(st), 0)
+                        for lv in range(3):
+                            wait = HINT_UNLOCK.get(lv)
+                            act = ""
+                            if wait is not None:
+                                if first and now - first >= wait:
+                                    status = "<span class='done'>已解锁</span>"
+                                elif first:
+                                    remain = max(1, (first + wait - now + 59) // 60)
+                                    status = f"<span class='todo'>冷却中 约{remain} 分钟</span>"
+                                    act = f"<a href='/admin?pass={ADMIN_TOKEN}&skip={qs['view'][0]}&stage={st}&lv={lv}'>跳过冷却</a>"
+                                else:
+                                    status = "<span class='todo'>未访问本关</span>"
+                            else:
+                                req = (vp.get("hint_req") or {}).get(str(st))
+                                if req and req.get("status") == "approved":
+                                    status = "<span class='done'>已批准</span>"
+                                elif req and req.get("status") == "pending":
+                                    status = "<span class='todo'>待审批</span>"
+                                    act = (f"<a href='/admin?pass={ADMIN_TOKEN}&approve={qs['view'][0]}&stage={st}'>批准</a> "
+                                           f"<a href='/admin?pass={ADMIN_TOKEN}&reject={qs['view'][0]}&stage={st}'>驳回</a>")
+                                elif req and req.get("status") == "rejected":
+                                    status = "<span class='err'>被驳回</span>"
+                                    act = f"<a href='/admin?pass={ADMIN_TOKEN}&approve={qs['view'][0]}&stage={st}'>直接批准</a>"
+                                else:
+                                    status = "<span class='todo'>未申请</span>"
+                                    act = f"<a href='/admin?pass={ADMIN_TOKEN}&approve={qs['view'][0]}&stage={st}'>直接批准</a>"
+                            unlock_rows.append(
+                                f"<tr><td>{st}</td><td>{HINT_LABELS[lv]}</td><td>{status}</td><td>{act or '—'}</td></tr>")
                     decode_html = f"""<div class="box"><p class="frag">玩家 {qs['view'][0]} 详情</p>
 <p>QQ：{vp.get('qq') or '—'} ｜ 昵称：{vp.get('name') or '—'} ｜ 进度：{player_progress(vp)[0]}/8</p>
 <p>碎片：<code>{frags}</code></p>
+<p class="frag" style="font-size:13px">提示解锁状态（GM 可跳过冷却 / 直接批准）</p>
+<table><tr><th>关</th><th>层</th><th>状态</th><th>操作</th></tr>{''.join(unlock_rows)}</table>
+<p class="frag" style="font-size:13px">码台账</p>
 <table><tr><th>码</th><th>内容</th><th>状态</th><th>吊销</th><th>生成时间</th></tr>{ledger}</table>
 <p><a href="/admin?pass={ADMIN_TOKEN}">← 返回总表</a></p></div>"""
         if qs.get("code", [""])[0]:
