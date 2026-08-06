@@ -14,11 +14,14 @@
     /join                 领取/恢复绑定码（写 cookie tick_player）
     /check                校验答案并记录进度（需要玩家身份）
     /final                终局校验（需要玩家身份）
+    /hidden               隐藏关卡：md5(短语) == flag 内串时解锁隐藏结局
     /admin?pass=<口令>    管理员进度面板
     /api/progress         插件查询玩家进度（secret 鉴权）
     /api/bind             插件上报 QQ 绑定（secret 鉴权）
+    /api/egg              插件上报彩蛋解锁（secret 鉴权）
     /api/stats            插件/管理员导出全部进度（secret 鉴权）
 """
+import hashlib
 import http.server
 import json
 import os
@@ -38,7 +41,20 @@ ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
 
 FINAL_KEY = "66b2cac2f48b7ada4f1e6f0e088883d2"
-FLAG = "flag{81fbaa81762885ac3481fd4b416485e6}"
+FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
+FLAG = f"flag{{{FLAG_INNER}}}"
+
+HIDDEN_LETTER = """汐月：
+
+如果你能看到这封信，说明有人替我找到了那句话。
+
+对钩函数在 x = 1 处取到最小值 2——两条曲线最接近的那一刻，却永远无法相交。我研究它研究了很久，才明白我一直在画错自己的那条线。
+
+我喜欢你。
+
+谢谢你替我守护这些秘密到现在。剩下的路，交给你了。
+
+—— 苏桁"""
 
 STAGE_ANSWERS = {
     1: "66b2",
@@ -252,6 +268,7 @@ def new_player():
                 "name": None,
                 "stages": {},
                 "final": False,
+                "egg": False,
                 "last": int(time.time()),
             }
             save_state()
@@ -321,6 +338,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/join":
             return self._handle_join(qs)
 
+        if path == "/hidden":
+            return self._handle_hidden(qs)
+
         if path in PAGES:
             return self._send(PAGES[path].encode())
 
@@ -341,6 +361,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/stats":
             return self._handle_api_stats(qs)
+
+        if path == "/api/egg":
+            return self._handle_api_egg(qs)
 
         self._send(b"404 Not Found", "text/plain", 404)
 
@@ -424,7 +447,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FLAG}</pre>
-<p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>"""
+<p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>
+<div class="box"><p style="font-size:13px;color:#6b7683">
+彩蛋：苏桁说过，这串十六进制不是随机数——它是他一句<b>四个字真心话</b>的摘要。
+猜出那句话，去 <code>/hidden</code> 认领，你会看到隐藏结局。</p></div>"""
             return self._send(page("终局", body).encode())
         if not player or player not in STATE["players"]:
             return self._send(
@@ -435,6 +461,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>每一页的右下角都有一个小签名，把它的内容填进来。</p></div>"""
         return self._send(page("碎片 8 · 签名", body, check_stage=8).encode())
+
+    def _handle_hidden(self, qs):
+        phrase = qs.get("phrase", [""])[0].strip()
+        player = self._player_from(qs) or self._cookie_player()
+        if not player or player not in STATE["players"]:
+            return self._send(
+                page("隐藏结局", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode()
+            )
+        if hashlib.md5(phrase.encode("utf-8")).hexdigest() != FLAG_INNER:
+            return self._send(
+                page("隐藏结局", "<div class='box'><p class='err'>❌ 不是这句话。</p><p>四个字，再想想。</p></div>").encode()
+            )
+        with LOCK:
+            p = STATE["players"][player]
+            p["egg"] = True
+            p["last"] = int(time.time())
+            save_state()
+        body = f"""<div class="box"><p class="ok">✅ 你找到了那句真心话。</p>
+<p>苏桁写的一封信，收件人是汐月：</p>
+<pre>{HIDDEN_LETTER}</pre>
+<p style="color:#6b7683">—— 隐藏结局 · 解锁</p></div>
+<a href="/tick" style="font-size:13px">← 返回第 1 关</a>"""
+        return self._send(page("隐藏结局 · 苏桁的信", body).encode())
 
     def _handle_admin(self, qs):
         if qs.get("pass", [""])[0] != ADMIN_TOKEN:
@@ -451,12 +500,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             lines.append(
                 f"<tr><td>{code}</td><td>{p['qq'] or '—'}</td><td>{p['name'] or '—'}</td>"
                 f"<td>{count}/8</td>{cells}<td class='{"done" if p["final"] else "todo"}'>{"✓" if p["final"] else "·"}</td>"
+                f"<td class='{"done" if p.get("egg") else "todo"}'>{"✓" if p.get("egg") else "·"}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td></tr>"
             )
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
-                + "".join(f"<th>{i}</th>" for i in range(1, 9)) + "<th>终局</th><th>最后活跃</th></tr>")
+                + "".join(f"<th>{i}</th>" for i in range(1, 9))
+                + "<th>终局</th><th>彩蛋</th><th>最后活跃</th></tr>")
         body = f"""<div class="box">
-<p>玩家总数：{len(rows)} ｜ 通关终局：{sum(1 for _, p in rows if p['final'])}</p>
+<p>玩家总数：{len(rows)} ｜ 通关终局：{sum(1 for _, p in rows if p['final'])} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <table>{head}{''.join(lines)}</table>
 <p style="font-size:12px;color:#6b7683">API: /api/stats?secret=…</p>
 </div>"""
@@ -479,6 +530,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "max": mx,
                 "stages": [int(s) for s in p["stages"] if p["stages"][s]],
                 "final": p["final"],
+                "egg": p.get("egg", False),
             })
 
     def _handle_api_bind(self, qs):
@@ -505,6 +557,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json({"ok": False, "err": "bad secret"}, 403)
         with LOCK:
             return self._json(STATE)
+
+    def _handle_api_egg(self, qs):
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            p["egg"] = True
+            p["last"] = int(time.time())
+            save_state()
+            return self._json({"ok": True})
 
 
 def main():

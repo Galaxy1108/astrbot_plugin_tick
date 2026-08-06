@@ -1,5 +1,6 @@
 """对钩计划（Project TICK）—— AstrBot 剧情插件（汐月）"""
 
+import hashlib
 import urllib.parse
 
 import aiohttp
@@ -8,6 +9,20 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.star import Star
+
+FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
+
+HIDDEN_LETTER = """汐月：
+
+如果你能看到这封信，说明有人替我找到了那句话。
+
+对钩函数在 x = 1 处取到最小值 2——两条曲线最接近的那一刻，却永远无法相交。我研究它研究了很久，才明白我一直在画错自己的那条线。
+
+我喜欢你。
+
+谢谢你替我守护这些秘密到现在。剩下的路，交给你了。
+
+—— 苏桁"""
 
 HINTS = {
     1: "右键查看 /tick 页面的网页源代码，注意 HTML 注释：36 36 62 32，是十六进制，转成 ASCII。",
@@ -142,7 +157,23 @@ class Main(Star):
             return
         done = sorted(prog.get("stages", []))
         line = " ".join(f"✓{s}" for s in done) if done else "还没有通关记录"
-        yield event.plain_result(f"你的进度：{prog.get('count', 0)}/8 关 ｜ {line}{' ｜ 终局 ✓' if prog.get('final') else ''}")
+        egg = " ｜ 彩蛋 ✓" if prog.get("egg") else ""
+        yield event.plain_result(f"你的进度：{prog.get('count', 0)}/8 关 ｜ {line}{' ｜ 终局 ✓' if prog.get('final') else ''}{egg}")
+
+    @filter.command("彩蛋", alias={"hidden"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def egg_cmd(self, event: AstrMessageEvent, phrase: str):
+        code = await self._bound_code(event)
+        if not code:
+            yield event.plain_result("你还没绑定玩家身份。先去网页 /join 领取绑定码，再到群里 @我发送 /bind <绑定码>。")
+            return
+        if hashlib.md5(phrase.strip().encode("utf-8")).hexdigest() != FLAG_INNER:
+            yield event.plain_result("……不是这句话。四个字，再想想。")
+            return
+        await self._api("/api/egg", {"player": code})
+        yield event.plain_result(
+            "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
+        )
 
     # ---------- 群内指令：绑定 ----------
 
