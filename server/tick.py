@@ -967,8 +967,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = f"""<div class="box"><p class="err">检测到旧登录方式</p>
 <p>为保护你的进度，登录方式已升级：验证码已发送到你的 QQ（{qq}）私聊。</p>
 <p>输入验证码更新登录；不验证将无法继续使用网页。</p>
-<form method="get"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
-<p style="font-size:12px;color:#6b7683">没收到？确认你已经<b>私聊过汐月</b>（机器人主动发信需要会话），或联系管理员。</p></div>
+<form method="get" action="/join"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
+<p style="font-size:12px;color:#6b7683">没收到？私聊汐月发送 <code>/登录</code> 即可获取验证码。</p></div>
 <p style="font-size:12px;color:#6b7683">已通关 {count} 关 ｜ 进度不会丢失</p>"""
         return page("身份升级", body)
 
@@ -1051,8 +1051,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if sess and not qs.get("fresh", [""])[0]:
                 return self._send(page("登录已失效", """<div class="box"><p class="err">登录已失效（可能已被管理员下线，或会话过期）。</p>
 <p>重新登录：私聊汐月发送 <code>/登录</code>，把回复给你的验证码填到下面：</p>
-<form method="get"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
-<p style="font-size:12px;color:#6b7683">进度不会丢失。没有绑定过 QQ？<a href="/join?fresh=1">点这里创建全新身份</a></p></div>""").encode())
+<form method="get" action="/join"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
+<p style="font-size:12px;color:#6b7683">进度不会丢失。私聊汐月发送 <code>/登录</code> 获取验证码。没有绑定过 QQ？<a href="/join?fresh=1">点这里创建全新身份</a></p></div>""").encode())
             # 全新访客：创建玩家并签发会话
             code = new_player()
             token = issue_session(code)
