@@ -558,7 +558,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extra = f"<p style='color:#ffd479'>记忆库开启码：{code_line(p, 'mem', 5, None, '/generate?stage=5&kind=mem')}</p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>「我毫无头绪」微提示 1 分钟解锁；第 1 层等 5 分钟、第 2 层等 20 分钟后可点「生成」，第 3 层申请后由管理员审批。</p>
 <p>码无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。</p>
 {''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
