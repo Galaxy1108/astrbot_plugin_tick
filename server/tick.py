@@ -379,7 +379,7 @@ def gen_frags():
     o7 = secrets.randbelow(10)
     f7 = "".join(str((int(c) + o7) % 10) for c in MORSE_BASE)
     va = secrets.randbelow(5) + 1
-    vb = secrets.randbelow(5 - va) + va + 1
+    vb = secrets.randbelow(6 - va) + va + 1  # vb ∈ (va, 6]，避免 randbelow(0) 崩溃
     pool = [f5[2], f5[3]] + [secrets.choice("0123456789abcdef") for _ in range(4)]
     v5 = list(pool[:4])
     v5.insert(va - 1, f5[2])
