@@ -8,6 +8,7 @@
 import asyncio
 import re
 import urllib.parse
+from typing import Any
 
 import aiohttp
 
@@ -48,7 +49,7 @@ class VerifyFragmentsTool(FunctionTool[AstrAgentContext]):
             "required": ["keys"],
         }
     )
-    star: "Main" = None  # 插件实例，__init__ 时注入
+    star: Any = None  # 插件实例，__init__ 时注入（Any 避免 pydantic 解析插件类）
 
     async def call(self, context: ContextWrapper[AstrAgentContext], **kwargs) -> ToolExecResult:
         try:
