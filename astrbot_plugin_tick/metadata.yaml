@@ -1,0 +1,15 @@
+name: astrbot_plugin_tick
+display_name: 对钩计划
+short_desc: ARG 剧情插件：汐月与苏桁的记忆
+desc: >
+  对钩计划（Project TICK）ARG 剧情插件。汐月会回应关于「苏桁」「记忆库」「访问凭证」的话题，
+  按剧情关键词给出固定回复与碎片线索。适合配合「对钩计划」网页谜题使用。
+version: 1.0.0
+author: Galaxy1108
+repo: https://github.com/Galaxy1108/astrbot_plugin_tick
+tags:
+  - ARG
+  - 剧情
+  - 解谜
+compatibility:
+  min_astrbot_version: "4.11.4"
