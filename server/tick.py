@@ -144,10 +144,11 @@ def render_hint(p: dict, stage: int, level: int) -> str:
             f"把图存下来用文本编辑器打开，找到 {b64}，base64 解码得到 {f[1]}。",
         ][level]
     if stage == 3:
+        p3 = int(f[0], 16) % 20 + 1  # 由碎片 1 推导（meta 不再存 p3）
         return [
             "用任何能算 ζ(3) 的工具（WolframAlpha、sympy……）拿到它的十进制展开。",
             f"先算 N =（碎片1 的十六进制值 mod 20）+ 1，再取 ζ(3) 小数点后第 N~N+3 位。",
-            f"N = (int(碎片1, 16) % 20) + 1 = {m['p3']}，第 {m['p3']}~{m['p3'] + 3} 位是 {f[2]}。",
+            f"N = (int(碎片1, 16) % 20) + 1 = {p3}，第 {p3}~{p3 + 3} 位是 {f[2]}。",
         ][level]
     if stage == 4:
         return [
@@ -1307,7 +1308,10 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 _, mx = player_progress(p)
                 if stage - 1 > mx:
                     return self._json({"ok": True, "status": "gated", "need": stage - 1})
-                text = render_hint(p, stage, level)
+                try:
+                    text = render_hint(p, stage, level)
+                except Exception:
+                    text = "这条提示暂时生成失败，稍后再试。"
                 label = f"第{stage}关·{'微提示' if level == -1 else HINT_LABELS[level]}"
             else:
                 need = SECRET_GATES.get(kind)
