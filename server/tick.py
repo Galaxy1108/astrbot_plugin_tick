@@ -42,7 +42,12 @@ STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
 
 ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
-COOKIE_NAME = "tick_player"
+COOKIE_NAME = "tick_sess"     # 新会话 cookie（随机 token，绑定码不再等于身份）
+COOKIE_OLD = "tick_player"   # 旧 cookie：仅用于检测"旧登录方式"，强制升级
+SESS_TTL = 30 * 24 * 3600    # 会话 30 天滑动续期
+CHALLENGE_TTL = 600          # 验证码 10 分钟
+CHALLENGE_MAX_TRIES = 5      # 连续错 5 次锁定
+OUTBOX_ID = [0]
 
 # 提示码规则：无时间限制、手动点击生成、用完即焚；发到群聊会被立即吊销（需重新生成/申请）
 # 三层提示解锁策略：第1层等 5 分钟，第2层等 20 分钟（自首次查看本关起算），第3层需管理员审批
@@ -268,7 +273,7 @@ def page(title, body, check_stage=None, footer_extra=""):
   <span id="r"></span>
 </div>
 <script>
-function getPlayer(){{var m=document.cookie.match(/tick_player=([0-9a-f]+)/);return m?m[1]:'';}}
+function getPlayer(){{var m=document.cookie.match(/tick_sess=([0-9a-f]+)/);return m?m[1]:'';}}
 function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
   fetch('/check?stage={check_stage}&ans='+encodeURIComponent(v)+'&player='+getPlayer()).then(r=>r.text()).then(t=>{{
     document.getElementById('r').innerHTML=t;}});}}
@@ -289,7 +294,7 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
 {check_html}
 {footer_html}
 <script>
-if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').style.display='';}}
+if(!document.cookie.match(/tick_sess=/)){{document.getElementById('banner').style.display='';}}
 </script>
 </body></html>"""
 
@@ -402,8 +407,43 @@ def load_state():
                 pass
             STATE = {"players": {}}
     STATE.setdefault("players", {})
+    STATE.setdefault("sessions", {})      # token -> {"player": 绑定码, "expire": 秒}
+    STATE.setdefault("challenges", {})    # 验证码 -> {"player", "qq", "expire", "tries"}
+    STATE.setdefault("outbox", [])        # 待推送队列 [{id, qq, player, text, ts}]
     # 通知指针持久化在网页端文件里：插件重装/指针丢失也不重放
     STATE.setdefault("notify_last", 0)
+
+
+def issue_session(player: str) -> str:
+    """签发/续期会话 token，返回 token。"""
+    now = int(time.time())
+    for t, v in list(STATE["sessions"].items()):
+        if v.get("player") == player:
+            v["expire"] = now + SESS_TTL
+            return t
+    token = secrets.token_hex(16)
+    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL}
+    return token
+
+
+def session_player(sess: str) -> str:
+    """会话 token -> 绑定码；无效/过期返回空。"""
+    v = STATE["sessions"].get(sess)
+    if not v:
+        return ""
+    if v.get("expire", 0) < int(time.time()):
+        STATE["sessions"].pop(sess, None)
+        return ""
+    return v.get("player", "")
+
+
+def old_cookie_code(headers_cookie: str) -> str:
+    """从 Cookie 头提取旧式绑定码 cookie（仅用于检测旧登录方式）。"""
+    for part in headers_cookie.split(";"):
+        k, _, v = part.strip().partition("=")
+        if k == COOKIE_OLD:
+            return v.strip().lower()
+    return ""
 
 
 def save_state():
@@ -551,7 +591,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for part in self.headers.get("Cookie", "").split(";"):
             k, _, v = part.strip().partition("=")
             if k == COOKIE_NAME:
-                return v.strip().lower()
+                with LOCK:
+                    return session_player(v.strip())
         return ""
 
     def _hint_box(self, stage: int, player: str):
@@ -615,6 +656,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
+        # 旧登录方式强制升级：只有旧式绑定码 cookie、且无有效会话时，触发 QQ 推送验证
+        if path not in ("/join",) and not path.startswith("/api/") and path != "/admin":
+            oldc = old_cookie_code(self.headers.get("Cookie", ""))
+            if oldc and oldc in STATE.get("players", {}) and not self._cookie_player():
+                p = STATE["players"][oldc]
+                if p.get("qq"):
+                    with LOCK:
+                        oldc = old_cookie_code(self.headers.get("Cookie", ""))
+                        self._challenge_for(oldc)
+                    return self._send(self._upgrade_page(oldc).encode())
         global _egg_footer
         _egg_footer = ""
         if path == "/final":  # 藏码只出现在终局页的页脚那一行
@@ -749,6 +800,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/verify":
             return self._handle_api_verify(qs)
 
+        if path == "/api/outbox":
+            return self._handle_api_outbox(qs)
+        if path == "/api/outbox_done":
+            return self._handle_api_outbox_done(qs)
         if path == "/api/mark_frag8":
             return self._handle_api_mark_frag8(qs)
         if path == "/api/verify_flag":
@@ -840,21 +895,88 @@ class Handler(http.server.BaseHTTPRequestHandler):
             footer_extra = "1842 ＋ 偏移 3 → 4175（每一位相加，超过 9 就减 10）"
         return page(f"碎片 {stage}", body + self._hint_box(stage, player), check_stage=stage, footer_extra=footer_extra)
 
-    def _handle_join(self, qs):
-        code = qs.get("code", [""])[0].strip().lower()
+    def _challenge_for(self, player: str) -> str:
+        """为玩家生成/复用验证码并投入推送队列，返回验证码。"""
+        now = int(time.time())
+        for c, ch in STATE["challenges"].items():
+            if ch.get("player") == player and ch.get("expire", 0) > now and ch.get("tries", 0) < CHALLENGE_MAX_TRIES:
+                return c
+        code = f"{secrets.randbelow(1000000):06d}"
+        p = STATE["players"].get(player)
+        qq = p.get("qq") if p else None
+        STATE["challenges"][code] = {"player": player, "qq": qq, "expire": now + CHALLENGE_TTL, "tries": 0}
+        if qq:
+            OUTBOX_ID[0] += 1
+            STATE["outbox"].append({
+                "id": OUTBOX_ID[0], "qq": qq, "player": player,
+                "text": f"ζ 计划：检测到旧登录方式。验证码：{code}（10 分钟内有效）。回网页 /join 输入它，登录会自动更新。",
+                "ts": now,
+            })
+        save_state()
+        return code
+
+    def _upgrade_page(self, player: str) -> str:
+        """旧登录方式升级页：验证码已推送到绑定的 QQ，输入后更新会话。"""
         with LOCK:
-            if not code:
-                # 已有绑定身份的访客：恢复身份，绝不重复创建
-                existing = self._cookie_player()
-                if existing and existing in STATE["players"]:
-                    code = existing
-                else:
-                    code = new_player()
-            if code not in STATE["players"]:
-                return self._send(page("绑定码无效", "<div class='box'><p class='err'>这个绑定码不存在。</p><p><a href='/join'>重新领取</a></p></div>").encode())
-            count, _ = player_progress(STATE["players"][code])
-            extra = f"<p>已绑定 QQ：{STATE['players'][code]['qq'] or '未绑定'} ｜ 已通关 {count} 关 ｜ 身份恢复/保留中，不会重置。</p>"
-        body = f"""<div class="box">
+            p = STATE["players"].get(player) or {}
+            qq = p.get("qq") or "?"
+            count, _ = player_progress(p)
+        body = f"""<div class="box"><p class="err">检测到旧登录方式</p>
+<p>为保护你的进度，登录方式已升级：验证码已发送到你的 QQ（{qq}）私聊。</p>
+<p>输入验证码更新登录；不验证将无法继续使用网页。</p>
+<form method="get"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
+<p style="font-size:12px;color:#6b7683">没收到？确认你已经<b>私聊过汐月</b>（机器人主动发信需要会话），或联系管理员。</p></div>
+<p style="font-size:12px;color:#6b7683">已通关 {count} 关 ｜ 进度不会丢失</p>"""
+        return page("身份升级", body)
+
+    def _handle_join(self, qs):
+        """玩家中心：
+        - 已有会话 → 显示状态；
+        - 输入验证码(verify=) → 校验并签发/更新会话；
+        - 输入绑定码(code=) → 仅未绑定 QQ 的玩家可用（绑定后绑定码作废）；
+        - 无任何输入 → 新玩家领绑定码（签发会话），或提示老玩家走 QQ 验证。"""
+        verify = qs.get("verify", [""])[0].strip().lower()
+        code = qs.get("code", [""])[0].strip().lower()
+        sess = ""
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == COOKIE_NAME:
+                sess = v.strip()
+        if verify:
+            with LOCK:
+                ch = STATE["challenges"].get(verify)
+                if not ch or ch.get("expire", 0) < int(time.time()):
+                    return self._send(page("验证码无效", "<div class='box'><p class='err'>验证码无效或已过期。</p><p><a href='/join'>← 返回 /join</a></p></div>").encode())
+                ch["tries"] = ch.get("tries", 0) + 1
+                if ch["tries"] > CHALLENGE_MAX_TRIES:
+                    STATE["challenges"].pop(verify, None)
+                    save_state()
+                    return self._send(page("验证码锁定", "<div class='box'><p class='err'>错误次数过多，验证码已锁定。</p><p>联系管理员解除，或清除浏览器 Cookie 后重新触发验证。</p><p><a href='/join'>← 返回 /join</a></p></div>").encode())
+                if ch["tries"] > 1:
+                    pass  # 剩余次数由页面提示体现
+                player = ch["player"]
+                STATE["challenges"].pop(verify, None)
+                token = issue_session(player)
+                save_state()
+            return self._send(
+                page("玩家中心", f"<div class='box'><p class='ok'>✅ 验证通过，登录已更新。</p><p>你的进度已恢复，继续挑战吧。</p></div><a href='/stage1' style='font-size:13px'>← 返回第 1 关</a>").encode(),
+                extra_headers=[
+                    f"Set-Cookie: {COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}",
+                    f"Set-Cookie: {COOKIE_OLD}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+                ],
+            )
+        with LOCK:
+            existing = self._cookie_player()
+            if code:
+                if code not in STATE["players"]:
+                    return self._send(page("绑定码无效", "<div class='box'><p class='err'>这个绑定码不存在。</p><p><a href='/join'>重新领取</a></p></div>").encode())
+                p = STATE["players"][code]
+                if p.get("qq"):
+                    return self._send(page("绑定码已作废", "<div class='box'><p class='err'>该绑定码已绑定过 QQ，已作废。</p><p>老玩家请走 QQ 验证登录：私聊汐月发送 <code>/找回</code> 或触发验证码后回本页输入。</p><p><a href='/join'>← 返回 /join</a></p></div>").encode())
+                token = issue_session(code)
+                save_state()
+                extra = f"<p>已绑定 QQ：{p['qq'] or '未绑定'} ｜ 已通关 {player_progress(p)[0]} 关</p>"
+                body = f"""<div class="box">
 <p class="frag">你的绑定码：{code}</p>
 <p>把它记住，然后按下面 3 步走：</p>
 <ol>
@@ -863,13 +985,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/submit 0x&lt;码&gt;</code> 兑换（每人每码只能用一次）。</li>
 </ol>
 {extra}
-<p style="color:#6b7683">不小心又进了 /join？没关系——身份不会重置，这里始终显示你原来的绑定码和进度。换设备/清 cookie 后，回 /join 输入绑定码即可恢复；绑定码彻底忘了就私聊汐月发送 <code>/找回</code>。</p>
+<p style="color:#6b7683">绑定 QQ 后绑定码即作废；换设备/清 cookie 后，回 /join 走 QQ 验证登录即可恢复进度。</p>
 </div>
 <a href="/stage1" style="font-size:13px">← 返回第 1 关</a>"""
-        return self._send(
-            page("玩家中心", body).encode(),
-            extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
-        )
+                return self._send(
+                    page("玩家中心", body).encode(),
+                    extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"},
+                )
+            if existing:
+                p = STATE["players"][existing]
+                token = issue_session(existing)
+                save_state()
+                extra = f"<p>已绑定 QQ：{p['qq'] or '未绑定'} ｜ 已通关 {player_progress(p)[0]} 关 ｜ 身份保留中，不会重置。</p>"
+                body = f"""<div class="box"><p class="frag">你已登录</p>
+<p>继续挑战吧。{extra}</p></div>
+<a href="/stage1" style="font-size:13px">← 返回第 1 关</a>"""
+                return self._send(
+                    page("玩家中心", body).encode(),
+                    extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"},
+                )
+            # 全新访客：创建玩家并签发会话
+            code = new_player()
+            token = issue_session(code)
+            p = STATE["players"][code]
+            extra = f"<p>已绑定 QQ：{p['qq'] or '未绑定'} ｜ 已通关 {player_progress(p)[0]} 关</p>"
+            body = f"""<div class="box">
+<p class="frag">你的绑定码：{code}</p>
+<p>把它记住，然后按下面 3 步走：</p>
+<ol>
+<li>回到群里，@汐月 发送 <code>/bind {code}</code>（绑定你的 QQ 身份）；</li>
+<li><b>私聊</b>汐月，发送 <code>/zeta</code> 查看玩法说明；</li>
+<li>每关页面的「专属提示码」区域有你的提示码，私聊汐月 <code>/submit 0x&lt;码&gt;</code> 兑换（每人每码只能用一次）。</li>
+</ol>
+{extra}
+<p style="color:#6b7683">绑定 QQ 后绑定码即作废；换设备/清 cookie 后，回 /join 走 QQ 验证登录即可恢复进度。</p>
+</div>
+<a href="/stage1" style="font-size:13px">← 返回第 1 关</a>"""
+            return self._send(
+                page("玩家中心", body).encode(),
+                extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"},
+            )
 
     def _handle_generate(self, qs):
         """手动生成提示码。已使用的码不可再生成；被吊销的码可重新生成。"""
@@ -1157,6 +1312,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     p.setdefault("hint_gen", {})[str(stage)] = int(time.time()) - wait
                     save_state()
                     flash = f"已为 {target} 跳过第 {stage} 关{HINT_LABELS[lv]}冷却。"
+            if qs.get("kick"):
+                acted = True
+                target = qs.get("kick", [""])[0]
+                removed = [t for t, v in STATE["sessions"].items() if v.get("player") == target]
+                for t in removed:
+                    STATE["sessions"].pop(t, None)
+                removed_ch = [c for c, v in STATE["challenges"].items() if v.get("player") == target]
+                for c in removed_ch:
+                    STATE["challenges"].pop(c, None)
+                save_state()
+                flash = f"已踢下线玩家 {target}（会话 {len(removed)} 个、验证码 {len(removed_ch)} 个已吊销）。"
+            if qs.get("unlock"):
+                acted = True
+                target = qs.get("unlock", [""])[0]
+                for c, v in STATE["challenges"].items():
+                    if v.get("player") == target:
+                        v["tries"] = 0
+                save_state()
+                flash = f"已解除玩家 {target} 的验证码锁定。"
             if qs.get("del"):
                 acted = True
                 target = qs.get("del", [""])[0]
@@ -1315,6 +1489,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"<td style='font-size:11px'>{used_cell}</td>"
                 f"<td>{time.strftime('%m-%d %H:%M', time.localtime(p['last']))}</td>"
                 f"<td><a href='/admin?pass={ADMIN_TOKEN}&view={code}'>详情</a> "
+                f"<a href='/admin?pass={ADMIN_TOKEN}&kick={code}' style='color:#ffb86c' "
+                f"onclick=\"return confirm('确认踢下线玩家 {code}？')\">踢下线</a> "
+                f"<a href='/admin?pass={ADMIN_TOKEN}&unlock={code}' style='color:#ffb86c'>解锁验证</a> "
                 f"<a href='/admin?pass={ADMIN_TOKEN}&del={code}' style='color:#ff6b6b' "
                 f"onclick=\"return confirm('确认删除玩家 {code}？')\">删除</a></td></tr>"
             )
@@ -1446,6 +1623,9 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
             if player not in STATE["players"]:
                 return self._json({"ok": False, "err": "player not found"})
             p = STATE["players"][player]
+            if p.get("qq") and p.get("qq") != qq:
+                return self._json({"ok": False, "err": "already bound",
+                                   "msg": "该绑定码已绑定其他 QQ，拒绝换绑（防抢号）。请联系管理员。"})
             p["qq"] = qq
             if name:
                 p["name"] = name
@@ -1550,6 +1730,31 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 STATE["notify_last"] = events[-1]["ts"] + 1
                 save_state()
         return self._json({"ok": True, "events": events})
+
+    def _handle_api_outbox(self, qs):
+        """插件轮询：取待推送的验证码私信（一次性，取后即删）。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        with LOCK:
+            items = STATE["outbox"]
+            STATE["outbox"] = []
+            save_state()
+        return self._json({"ok": True, "items": items})
+
+    def _handle_api_outbox_done(self, qs):
+        """推送确认：ok=0（失败）时重新入队，等待下次轮询重试。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        if qs.get("ok", ["1"])[0] != "1":
+            with LOCK:
+                OUTBOX_ID[0] += 1
+                STATE["outbox"].append({
+                    "id": OUTBOX_ID[0], "qq": qs.get("qq", [""])[0],
+                    "player": qs.get("player", [""])[0], "text": qs.get("text", [""])[0],
+                    "ts": int(time.time()),
+                })
+                save_state()
+        return self._json({"ok": True})
 
     def _handle_api_mark_frag8(self, qs):
         """AI 念出第 8 块碎片后调用：标记已找到（仅首次），产生 frag8 事件。"""

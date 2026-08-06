@@ -493,4 +493,42 @@ class Main(Star):
                 await self._notify_events()
             except Exception as e:
                 logger.error(f"[tick] 轮询失败: {e}")
+            try:
+                await self._push_challenges()
+            except Exception as e:
+                logger.error(f"[tick] 验证码推送失败: {e}")
             await asyncio.sleep(POLL_INTERVAL)
+
+    async def _private_umo_for(self, qq: str) -> str:
+        """为指定 QQ 构造私聊 umo（onebot 适配器可主动发私信）。"""
+        platform = ""
+        for src in (getattr(self, "_group_umo", None),
+                    await self.get_kv_data("tick_notify_umo", None)):
+            if src and ":private:" in str(src):
+                platform = str(src).split(":", 1)[0]
+                break
+        if not platform:
+            return ""
+        return f"{platform}:private:{qq}"
+
+    async def _push_challenges(self) -> None:
+        """轮询网页推送队列，主动私信 QQ 发送鉴权验证码。"""
+        ret = await self._api("/api/outbox", {})
+        if not ret or not ret.get("ok"):
+            return
+        for it in ret.get("items", []):
+            qq = str(it.get("qq") or "")
+            text = str(it.get("text") or "")
+            player = str(it.get("player") or "")
+            if not qq or not text:
+                continue
+            umo = await self._private_umo_for(qq)
+            if not umo:
+                logger.warning(f"[tick] 无法构造私聊通道，验证码推送失败 qq={qq}")
+                await self._api("/api/outbox_done", {"ok": 0, "qq": qq, "player": player, "text": text})
+                continue
+            try:
+                await self.context.send_message(umo, MessageChain(chain=[Plain(text)]))
+            except Exception as e:
+                logger.error(f"[tick] 验证码私信发送失败 qq={qq}: {e}")
+                await self._api("/api/outbox_done", {"ok": 0, "qq": qq, "player": player, "text": text})
