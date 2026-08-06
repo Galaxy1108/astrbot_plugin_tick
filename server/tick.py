@@ -585,25 +585,49 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/zeta":
             return self._send(self._stage_page(1).encode())
         if path == "/secret":
+            g = self._stage_gate(2)
+            if g is not None:
+                return self._send(self._locked_page(2, g).encode())
             return self._send(self._stage_page(2).encode())
         if path == "/stage3":
+            g = self._stage_gate(3)
+            if g is not None:
+                return self._send(self._locked_page(3, g).encode())
             return self._send(self._stage_page(3).encode())
         if path == "/stage4":
+            g = self._stage_gate(4)
+            if g is not None:
+                return self._send(self._locked_page(4, g).encode())
             return self._send(self._stage_page(4).encode())
         if path == "/stage5":
+            g = self._stage_gate(5)
+            if g is not None:
+                return self._send(self._locked_page(5, g).encode())
             return self._send(self._stage_page(5).encode())
         if path == "/stage6":
+            g = self._stage_gate(6)
+            if g is not None:
+                return self._send(self._locked_page(6, g).encode())
             return self._send(self._stage_page(6).encode())
         if path == "/stage7":
+            g = self._stage_gate(7)
+            if g is not None:
+                return self._send(self._locked_page(7, g).encode())
             return self._send(self._stage_page(7).encode())
 
         if path == "/check":
             return self._handle_check(qs)
 
         if path == "/final":
+            g = self._stage_gate(8)
+            if g is not None:
+                return self._send(self._locked_page(8, g).encode())
             return self._handle_final(qs)
 
         if path == "/vault":
+            g = self._stage_gate(5)
+            if g is not None:
+                return self._send(self._locked_page(5, g).encode())
             return self._handle_vault(qs)
 
         if path == "/hidden":
@@ -637,6 +661,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._handle_api_stats(qs)
 
         self._send(b"404 Not Found", "text/plain", 404)
+
+    def _stage_gate(self, stage: int):
+        """页面访问门禁：第 N 关页面需要完成第 1~N-1 关；返回缺失关或 None。"""
+        player = self._cookie_player()
+        if not player or player not in STATE["players"]:
+            return "join"
+        p = STATE["players"][player]
+        for i in range(1, stage):
+            if not p["stages"].get(str(i)):
+                return i
+        return None
+
+    def _locked_page(self, stage: int, missing):
+        if missing == "join":
+            return page(f"碎片 {stage}", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>")
+        nxt = STAGE_PATHS[missing] if missing < 8 else "/final"
+        return page(f"碎片 {stage}", f"""<div class="box"><p class="err">还没到这一关。</p>
+<p>要先完成第 <b>{missing}</b> 关，才能进入第 {stage} 关。</p>
+<p><a href="{nxt}">前往第 {missing} 关 →</a></p></div>""")
 
     def _stage_page(self, stage: int):
         player = self._cookie_player()
@@ -848,12 +891,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FAKE_FLAG}</pre>
 <p style="color:#6b7683">「……？」 —— 苏桁</p></div>
-<div class="box"><p class="err">你总觉得哪里不对。</p>
-<p>七个碎片拼出的，只是一半的故事。苏桁不会把最重要的秘密放在网页上——</p>
-<p>最后一块碎片，只存在于汐月的心里。私聊她，用真心或证据打动她。</p></div>"""
-                return self._send(page("假结局", body).encode())
+<div class="box"><p class="err">……感觉哪里不太对。</p>
+<p>像是缺了什么。真正的答案，好像从来都不在网页上。</p></div>"""
+                return self._send(page("对钩……？", body).encode())
         body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
-<p>提示：前七个碎片拼起来是「假结局」；真正的结局需要第八块碎片。</p>
+<p>感觉哪里不太对？好像……还缺了一块。</p>
 <p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p></div>"""
