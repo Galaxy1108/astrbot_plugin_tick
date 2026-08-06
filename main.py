@@ -64,7 +64,7 @@ class VerifyFlagTool(FunctionTool[AstrAgentContext]):
             if not ret or not ret.get("ok"):
                 return "验证服务暂时不可用，稍后再试。"
             if ret.get("match"):
-                await self.star.set_kv_data(f"tick_told_{qq}", 1)  # 验证通过：汐月已经知道了最终数字
+                await self.star.put_kv_data(f"tick_told_{qq}", 1)  # 验证通过：汐月已经知道了最终数字
             return "验证通过：这个 flag 是真实的。" if ret.get("match") else "核对失败：这个 flag 对不上。"
         except Exception as e:
             logger.error(f"[tick] verify_flag 工具出错: {e}")

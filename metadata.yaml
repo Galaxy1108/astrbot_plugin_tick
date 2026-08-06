@@ -9,7 +9,7 @@ desc: >
   提示码每人每码唯一、无时间限制、用完即焚；发到群聊会被插件自动吊销。
   第 8 关套话：私聊念出自己的碎片后，插件自动注入附加剧情扮演层（LLM 工具 verify_fragments 核对）。
   需要配套「ζ 计划」网页服务器（tick.py）使用。
-version: 2.1.22
+version: 2.1.23
 author: Galaxy1108
 repo: https://github.com/Galaxy1108/astrbot_plugin_tick
 tags:
