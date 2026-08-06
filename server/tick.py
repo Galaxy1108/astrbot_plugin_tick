@@ -583,6 +583,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._handle_generate(qs)
 
         if path == "/zeta":
+            g = self._stage_gate(1)
+            if g is not None:
+                return self._send(self._locked_page(1, g).encode())
             return self._send(self._stage_page(1).encode())
         if path == "/secret":
             g = self._stage_gate(2)
@@ -663,11 +666,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(b"404 Not Found", "text/plain", 404)
 
     def _stage_gate(self, stage: int):
-        """页面访问门禁：第 N 关页面需要完成第 1~N-1 关；返回缺失关或 None。"""
+        """页面访问门禁：需绑定 QQ；第 N 关页面需完成第 1~N-1 关。
+        返回 "join"=未领绑定码、"bind"=未绑 QQ、整数=缺失关、None=放行。"""
         player = self._cookie_player()
         if not player or player not in STATE["players"]:
             return "join"
         p = STATE["players"][player]
+        if not p.get("qq"):
+            return "bind"
         for i in range(1, stage):
             if not p["stages"].get(str(i)):
                 return i
@@ -676,6 +682,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _locked_page(self, stage: int, missing):
         if missing == "join":
             return page(f"碎片 {stage}", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>")
+        if missing == "bind":
+            player = self._cookie_player()
+            return page(f"碎片 {stage}", f"""<div class="box"><p class="err">需要绑定 QQ 才能继续。</p>
+<p>回群里 @汐月 发送 <code>/bind {player}</code>，然后刷新本页。</p>
+<p style="color:#6b7683">（绑定后你的进度会和你本人关联，防作弊必备。）</p></div>""")
         nxt = STAGE_PATHS[missing] if missing < 8 else "/final"
         return page(f"碎片 {stage}", f"""<div class="box"><p class="err">还没到这一关。</p>
 <p>要先完成第 <b>{missing}</b> 关，才能进入第 {stage} 关。</p>
@@ -732,6 +743,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not p:
                 return self._send(page("生成", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
             now = int(time.time())
+            if not p.get("qq"):
+                return self._send(page("生成", "<div class='box'><p class='err'>需要绑定 QQ 才能继续。</p><p>回群里 @汐月 发送 <code>/bind " + player + "</code>。</p></div>").encode())
             if kind == "h":
                 try:
                     stage = int(qs.get("stage", ["0"])[0])
@@ -794,6 +807,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             p = STATE["players"].get(player)
             if not p:
                 return self._send(page("申请", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
+            if not p.get("qq"):
+                return self._send(page("申请", "<div class='box'><p class='err'>需要绑定 QQ 才能继续。</p><p>回群里 @汐月 发送 <code>/bind " + player + "</code>。</p></div>").encode())
             req = (p.get("hint_req") or {}).get(str(stage))
             if req and req.get("status") == "pending":
                 body = f"""<div class="box"><p class="frag">申请已提交</p>
@@ -825,6 +840,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "text/html; charset=utf-8",
                 )
             ensure_frags(p)
+            if not p.get("qq"):
+                return self._send(
+                    "<span class='err'>需要绑定 QQ 才能继续。</span> 回群里 @汐月 发送 <code>/bind " + player + "</code>，然后回来。",
+                    "text/html; charset=utf-8",
+                )
             if stage > 1:
                 missing = next((i for i in range(1, stage) if not p["stages"].get(str(i))), None)
                 if missing is not None:
