@@ -882,7 +882,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self._send(page("生成", "<div class='box'><p class='err'>彩蛋码需要先通关终局。</p></div>").encode())
                 issue_code(p, "egg", 0, None)
                 save_state()
-                return self._redirect("/final?key=" + FINAL_KEY)
+                return self._redirect("/final")
         return self._send("参数错误", "text/plain")
 
     def _redirect(self, path: str):

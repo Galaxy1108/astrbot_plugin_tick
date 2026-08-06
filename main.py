@@ -122,15 +122,38 @@ class Main(Star):
         super().__init__(context)
         self.config = config or {}
         self._poll_task: asyncio.Task | None = None
+        self._umo_task: asyncio.Task | None = None
+        self._umo_queue: asyncio.Queue | None = None
         self.context.add_llm_tools(VerifyFlagTool(star=self))
 
     async def initialize(self) -> None:
+        self._umo_queue = asyncio.Queue()
+        self._umo_task = asyncio.create_task(self._umo_loop())
         self._poll_task = asyncio.create_task(self._poll_loop())
 
     async def terminate(self) -> None:
         if self._poll_task:
             self._poll_task.cancel()
             self._poll_task = None
+        if self._umo_task:
+            self._umo_task.cancel()
+            self._umo_task = None
+
+    def _persist_umo(self, umo: str) -> None:
+        q = getattr(self, "_umo_queue", None)
+        if q is not None:
+            q.put_nowait(("umo", umo))
+
+    async def _umo_loop(self) -> None:
+        """把播报目标持久化到 KV，插件重载/重启后不丢。"""
+        while True:
+            try:
+                _, umo = await self._umo_queue.get()
+                await self.put_kv_data("tick_notify_umo", umo)
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.error(f"[tick] 播报目标持久化失败: {e}")
 
     # ---------- 与网页服务器通信 ----------
 
@@ -343,20 +366,25 @@ class Main(Star):
     # ---------- 通关/进度播报（轮询网页 /api/events） ----------
 
     def _remember_group(self, event: AstrMessageEvent) -> None:
-        """记住播报目标：notify_group 填群号 → 该群；填 QQ 号 → 该私聊（测试用）。"""
+        """记住播报目标：notify_group 填群号 → 该群；填 QQ 号 → 该私聊（测试用）。
+        持久化到 KV，插件重载/重启后仍有效。"""
         ng = str(self.config.get("notify_group", "") or "")
         if not ng:
             return
         if event.is_private_chat():
             if str(event.get_sender_id()) == ng:
                 self._group_umo = event.unified_msg_origin
+                self._persist_umo(event.unified_msg_origin)
             return
         if str(event.get_group_id() or "") != ng:
             return
         self._group_umo = event.unified_msg_origin
+        self._persist_umo(event.unified_msg_origin)
 
     async def _notify_events(self) -> None:
         umo = getattr(self, "_group_umo", None)
+        if not umo:
+            umo = await self.get_kv_data("tick_notify_umo", None)
         if not umo:
             return
         last = await self.get_kv_data("tick_notify_last", 0)
