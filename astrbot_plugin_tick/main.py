@@ -109,6 +109,9 @@ class Main(Star):
             yield event.plain_result(ret["text"] + ("\n" + tail if tail else ""))
         elif status == "gated":
             yield event.plain_result(f"不行哦，你还没通关第 {ret['need']} 关，这个码还不能用。")
+        elif status == "notyet":
+            mins = max(1, (ret.get("wait", 0) + 59) // 60)
+            yield event.plain_result(f"这一层提示还没解锁，还要等约 {mins} 分钟。回到关卡页刷新看看进度。")
         elif status == "expired":
             yield event.plain_result("这个码过期了。回到网页上对应关卡，刷新页面重新领取。")
         elif status == "used":

@@ -45,6 +45,7 @@ ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
 
 CODE_TTL = 600  # 一次性提示码自生成起 10 分钟有效
+HINT_COOLDOWN = 600  # 三层提示逐层解锁：每层间隔 10 分钟（自首次查看本关起算）
 
 FINAL_KEY = "66b2cac256907ada4f1e9999088883d2"
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
@@ -299,6 +300,7 @@ def new_player():
                 "name": None,
                 "stages": {},
                 "stage_ts": {},
+                "hint_gen": {},
                 "final": False,
                 "final_ts": None,
                 "egg": False,
@@ -364,18 +366,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return ""
 
     def _hint_box(self, stage: int, player: str):
-        """本关专属提示码区域。"""
+        """本关专属提示码区域（三层提示逐层解锁，每层间隔 HINT_COOLDOWN 秒）。"""
         with LOCK:
             p = STATE["players"].get(player)
             if not p:
                 return """<div class="box"><p class="frag">专属提示码</p>
 <p>领取绑定码后，这里会显示你的专属提示码（每人每码唯一，用完即焚）。</p>
 <p><a href="/join">去 /join 领取绑定码</a></p></div>"""
-            codes = [issue_code(p, "h", stage, lv) for lv in range(3)]
+            now = int(time.time())
+            first = p.setdefault("hint_gen", {}).get(str(stage))
+            if first is None:
+                first = now
+                p["hint_gen"][str(stage)] = now
+            lines = []
+            for lv in range(3):
+                unlock_at = first + HINT_COOLDOWN * lv
+                if now >= unlock_at:
+                    c = issue_code(p, "h", stage, lv)
+                    lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code></p>")
+                else:
+                    mins = max(1, (unlock_at - now + 59) // 60)
+                    lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#6b7683'>解锁中，还需约 {mins} 分钟</span></p>")
             save_state()
-            lines = "".join(
-                f"<p>{HINT_LABELS[i]}：<code>/submit 0x{c}</code></p>" for i, c in enumerate(codes)
-            )
             extra = ""
             if stage == 5:
                 extra = f"<p style='color:#ffd479'>记忆库开启码：<code>/submit 0x{issue_code(p, 'mem', 5, None)}</code></p>"
@@ -384,8 +396,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extra = f"<p style='color:#ffd479'>凭证码：<code>/submit 0x{issue_code(p, 'cred', 7, None)}</code></p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>私聊汐月发送对应指令兑换，每人每码只能用一次，自生成起 10 分钟有效（过期回本页刷新）。</p>
-{lines}{extra}
+<p>三层提示<b>逐层解锁</b>（每层间隔 10 分钟，自首次打开本页起算）；每个码每人只能用一次，自生成起 10 分钟有效。刷新页面查看最新进度。</p>
+{''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
 
     def do_GET(self):
@@ -670,6 +682,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             now = int(time.time())
             kind, stage, level = entry["kind"], entry.get("stage"), entry.get("level")
             if kind == "h":
+                first = (p.get("hint_gen") or {}).get(str(stage), 0)
+                if now - first < HINT_COOLDOWN * level:
+                    return self._json({"ok": True, "status": "notyet",
+                                       "wait": HINT_COOLDOWN * level - (now - first)})
                 _, mx = player_progress(p)
                 if stage - 1 > mx:
                     return self._json({"ok": True, "status": "gated", "need": stage - 1})
