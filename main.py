@@ -321,6 +321,7 @@ class Main(Star):
     # ---------- 群内剧情对话（不含任何答案/提示） ----------
 
     @filter.regex(r"苏桁|ζ|黎曼")
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def lore(self, event: AstrMessageEvent):
         self._remember_group(event)
         yield event.plain_result(
@@ -331,6 +332,7 @@ class Main(Star):
         )
 
     @filter.regex(r"网站|网址|入口")
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def site(self, event: AstrMessageEvent):
         self._remember_group(event)
         yield event.plain_result(
