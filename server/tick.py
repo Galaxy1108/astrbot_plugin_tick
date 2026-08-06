@@ -416,14 +416,14 @@ def load_state():
 
 
 def issue_session(player: str) -> str:
-    """签发/续期会话 token，返回 token。"""
+    """签发/续期会话 token：只复用未进宽限期的有效 token，否则签发全新 token。"""
     now = int(time.time())
     for t, v in list(STATE["sessions"].items()):
-        if v.get("player") == player:
+        if v.get("player") == player and not v.get("grace_until"):
             v["expire"] = now + SESS_TTL
             return t
     token = secrets.token_hex(16)
-    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL}
+    STATE["sessions"][token] = {"player": player, "expire": now + SESS_TTL, "rot": now}
     return token
 
 
