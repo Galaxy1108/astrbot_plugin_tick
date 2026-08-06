@@ -196,7 +196,7 @@ class Main(Star):
 
     async def _api(self, path: str, params: dict, retries: int = 3):
         """调用网页 API；失败自动重试（网页重启等瞬时故障不影响兑付）。"""
-        base = str(self.config.get("web_base", "http://127.0.0.1:8899")).rstrip("/")
+        base = str(self.config.get("web_base", "http://127.0.0.1:8080")).rstrip("/")
         token = str(self.config.get("admin_token", "tick-admin-9c4f2b7a1d"))
         params = dict(params)
         params["secret"] = token
@@ -251,7 +251,7 @@ class Main(Star):
         code = await self._bound_code(event)
         if code:
             await self.put_kv_data(f"tick_umo_{code}", event.unified_msg_origin)
-        base = str(self.config.get("public_base", "http://47.103.66.93:8899")).rstrip("/")
+        base = str(self.config.get("public_base", "http://47.103.66.93:8080")).rstrip("/")
         yield event.plain_result(
             "苏桁啊……他研究黎曼 ζ 函数，后来突然不见了。\n"
             f"他的网站还开着：{base}/\n"

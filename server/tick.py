@@ -36,7 +36,7 @@ import time
 import urllib.parse
 from pathlib import Path
 
-PORT = 8899
+PORT = 8080
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 DATA_DIR = BASE_DIR / "data"
