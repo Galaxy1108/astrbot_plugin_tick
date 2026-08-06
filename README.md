@@ -15,7 +15,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 | 路径 | 说明 |
 |------|------|
-| `astrbot_plugin_tick/` | AstrBot 插件（汐月：兑付柜台/播报/泄码检测/套话注入/LLM 工具，可从 GitHub 安装） |
+| 仓库根目录（`metadata.yaml`/`main.py`/`_conf_schema.json`） | AstrBot 插件本体（汐月：兑付柜台/播报/泄码检测/套话注入/LLM 工具），GitHub 仓库根目录即插件 |
 | `server/tick.py` | ARG 网页服务器（零依赖，Python 标准库）+ 玩家数据库 `data/progress.json` |
 | `server/make_assets.py` | PNG tEXt 隐写注入脚本 |
 | `server/static/zeta.png` | ζ 函数草图：tEXt 块 `key=zeta`（XOR 解密卡密钥）+ `t1`~`t8`（第 4 关 8 个编号块） |
@@ -176,7 +176,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 ## 插件安装
 
 插件市场 → 手动安装 → `https://github.com/Galaxy1108/astrbot_plugin_tick`
-或把 `astrbot_plugin_tick/` 复制到 `data/plugins/` 后重载插件。
+或把仓库根目录（`metadata.yaml`/`main.py`/`_conf_schema.json`/`__init__.py`）复制到 `data/plugins/` 下后重载插件。
 配置：`admin_token` 与网页端一致；`notify_group` 填播报群号（可选）。
 
 ## 网页服务器（Windows）
