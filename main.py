@@ -255,6 +255,8 @@ class Main(Star):
         prog = await self._progress(code)
         if not prog or prog.get("max", 0) < 7:
             return
+        if prog.get("final"):
+            return  # 已通关真结局：游戏结束，停止注入扮演层
         keys = prog.get("frags") or []
         req.system_prompt = (req.system_prompt or "") + ARG_PERSONA  # 注入人格扩展区域
         text = event.get_message_str() or ""

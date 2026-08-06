@@ -1008,7 +1008,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif key == fake_key:
                 now = int(time.time())
                 p["fake"] = True
-                p["fake_ts"] = now
+                p["fake_ts"] = now_ms()  # 事件时间戳必须毫秒，否则永远小于轮询指针
                 p["last"] = now
                 save_state()
                 fake_body = f"""<div class="box">
