@@ -11,7 +11,7 @@
     5: 4f1e   6: 9999   7: 0888   8: 83d2
 
 一次性提示码系统:
-    每关页面按玩家动态签发 3 层提示码 + 记忆库/凭证/彩蛋码（每人每码唯一）。
+    每关页面按玩家签发 3 层提示码 + 记忆库/彩蛋码（每人每码唯一）。
     码无时间限制、用完即焚、只认本人；发到群聊会被立即吊销（需重新生成/申请）。私聊汐月 /submit 0x<码> 统一兑换。
     后台 /admin 输入泄露的码可定位泄密者。
 
@@ -290,10 +290,9 @@ STAGE_BODIES = {
 """,
     7: """
 <div class="box">
-<p>汐月最近变得敏感多疑。她只认一句"口令"——苏桁当年和她约定的暗语。</p>
-<p>要拿到口令，你需要一个<b>凭证码</b>——它在下方「专属提示码」区域。</p>
-<p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;凭证码&gt;</code></p>
-<p style="color:#6b7683">只有完成了前 6 关的人，汐月才会理会。（没绑定的话先去 <a href="/join">/join</a>）</p>
+<p>苏桁的旧录音笔里只留下一段沙沙声：<a href="/static/beep.wav">录音.wav</a>（7 秒）。</p>
+<p>有人说那是他最后的密码。用耳朵听，或者用 Audacity 看波形。</p>
+<p style="color:#6b7683">（滴、滴——像是有人在敲电报。）</p>
 </div>
 """,
 }
@@ -467,9 +466,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if stage == 5:
                 extra = f"<p style='color:#ffd479'>记忆库开启码：{code_line(p, 'mem', 5, None, '/generate?stage=5&kind=mem')}</p>"
                 save_state()
-            if stage == 7:
-                extra = f"<p style='color:#ffd479'>凭证码：{code_line(p, 'cred', 7, None, '/generate?stage=7&kind=cred')}</p>"
-                save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
 <p>提示码<b>手动生成</b>：先解开本层的<b>解密卡</b>（第一层 ROT13、第二层 Base64、第三层 XOR，密钥在 ζ 草图里），解出的短语提交解锁后，才能点「生成提示码」。</p>
 <p>码无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。第 1 层等 5 分钟、第 2 层等 20 分钟解锁生成，第 3 层需管理员审批。</p>
@@ -497,6 +493,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             png = STATIC_DIR / "zeta.png"
             if png.exists():
                 return self._send(png.read_bytes(), "image/png")
+            return self._send(b"not found", "text/plain", 404)
+
+        if path == "/static/beep.wav":
+            wav = STATIC_DIR / "beep.wav"
+            if wav.exists():
+                return self._send(wav.read_bytes(), "audio/wav")
             return self._send(b"not found", "text/plain", 404)
 
         if path == "/join":
@@ -669,10 +671,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 issue_code(p, "mem", 5, None)
                 save_state()
                 return self._redirect("/stage5")
-            if kind == "cred":
-                issue_code(p, "cred", 7, None)
-                save_state()
-                return self._redirect("/stage7")
             if kind == "egg":
                 if not p.get("final"):
                     return self._send(page("生成", "<div class='box'><p class='err'>彩蛋码需要先通关终局。</p></div>").encode())
