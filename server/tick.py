@@ -108,14 +108,14 @@ HINT_TEXTS = {
         "那 6 个 9 从第 762 位开始，取前 4 个：9999。",
     ],
     7: [
-        "这一关要问汐月。私聊她，用下方「专属提示码」区的凭证码。",
-        "口令在汐月那里：私聊发送 /submit 0x<凭证码>（需完成前 6 关）。",
-        "/submit 0x<凭证码> 会告诉你碎片七：0888。",
+        "把录音听/看几遍，数数「嘀」和「哒」——是有人在敲电报。",
+        "那是摩斯电码：短音=点，长音=划。0 是五个划，8 是三个划两个点。",
+        "整段是 ----- ---.. ---.. ---..，即 0888。",
     ],
     8: [
-        "留意每一个页面的右下角。",
-        "每页右下角有个不起眼的小签名 ◆ 83d2。",
-        "签名是 83d2。",
+        "网页上没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。",
+        "直接要她不会给。证明自己：准确说出你收集到的碎片编号（比如 66b2、4f1e、0888……），或者认真说一句心里话。",
+        "报出你记得的三四个碎片，再真诚地说一句心里话。她心里藏着 83d2——八、三、D、二。",
     ],
 }
 
@@ -164,11 +164,10 @@ UNLOCK_METHOD = {0: "ROT13（每个字母移动 13 位）", 1: "Base64 解码", 
 
 SECRET_TEXTS = {
     "mem": "记忆库……（信号很不稳定）我只记得四个字符：4、F、1、E。对，4f1e。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。",
-    "cred": "……凭证核对中。校验通过。碎片七：0888。拿去吧，别说是我给的。",
     "egg": "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER,
 }
 
-SECRET_GATES = {"mem": 4, "cred": 6, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
+SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
 
 NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
 STAGE_PATHS = {1: "/zeta", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
@@ -204,7 +203,7 @@ footer { margin-top:60px; border-top:1px solid #222a33; padding-top:14px; font-s
 
 
 def page(title, body, check_stage=None):
-    """渲染一个带统一头尾(右下角签名 83d2)的页面。"""
+    """渲染一个带统一头尾的页面。"""
     check_html = ""
     if check_stage:
         check_html = f"""
@@ -229,8 +228,7 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
 <div class="banner" id="banner" style="display:none">还没领取绑定码？<a href="/join">先去 /join 领取</a>，不然进度和提示都拿不到。</div>
 {body}
 {check_html}
-<footer>苏桁 · ζ(s) = Σ 1/nˢ
-<span class="sign">◆ 83d2</span></footer>
+<footer>苏桁 · ζ(s) = Σ 1/nˢ</footer>
 <script>
 if(!document.cookie.match(/tick_player=/)){{document.getElementById('banner').style.display='';}}
 </script>
@@ -784,7 +782,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
 <p>卡住了？第 8 关的专属提示码在下方（一次性）。</p></div>
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
-<p>每一页的右下角都有一个小签名，把它的内容填进来。</p></div>"""
+<p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。</p></div>"""
         return self._send(page("碎片 8 · 签名", body + self._hint_box(8, player), check_stage=8).encode())
 
     def _handle_hidden(self, qs):
