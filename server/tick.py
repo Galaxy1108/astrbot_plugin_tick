@@ -334,8 +334,9 @@ def stage_body(p: dict, stage: int) -> str:
         return f"""
 <div class="box">
 <p>苏桁的笔记本上，只有一行字——一个只属于你的标记：</p>
-<p class="frag">你的标记：{m['m6']}</p>
-<p>他说，答案藏在他留下的那串数字里。</p>
+<p class="frag">你的标记：{m['m6']}…</p>
+<p>……然后呢？</p>
+<p style="color:#6b7683">他说，答案藏在他留下的那串数字里。</p>
 </div>
 """
     return """
