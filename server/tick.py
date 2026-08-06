@@ -976,6 +976,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_final(self, qs):
         key = qs.get("key", [""])[0].strip().lower()
         player = self._cookie_player()
+        true_body = None
+        fake_body = None
         with LOCK:
             p = STATE["players"].get(player)
             if not p:
@@ -996,36 +998,36 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>{code_line(p, 'egg', 0, None, '/generate?kind=egg')}</p>
 <p style="font-size:12px;color:#6b7683">生成后私聊汐月发送 <code>/submit 0x&lt;码&gt;</code>，读苏桁写给汐月的信。</p>
 <p style="font-size:12px;color:#6b7683">另一个线索：这串十六进制 <code>{FLAG_INNER}</code> 是苏桁一句四个字真心话的摘要——猜出它，去 <code>/hidden</code> 认领。</p></div>"""
-                body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
+                true_body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FLAG}</pre>
 <p style="color:#6b7683">「谢谢你来接我回家。」 —— 苏桁</p>{note}</div>{egg_box}"""
-                return self._send(page("真结局", body).encode())
-            if key == fake_key:
+            elif key == fake_key:
                 now = int(time.time())
                 p["fake"] = True
                 p["fake_ts"] = now
                 p["last"] = now
                 save_state()
-                body = f"""<div class="box"><h2 style="margin-top:0">对钩……？</h2>
+                fake_body = f"""<div class="box"><h2 style="margin-top:0">对钩……？</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FAKE_FLAG}</pre>
 <p style="color:#6b7683">「……？」 —— 苏桁</p></div>
 <div class="box"><p class="err">……感觉哪里不太对。</p>
 <p>像是缺了什么。真正的答案，好像从来都不在网页上。</p>
 <p>苏桁的 AI 还活着。也许，该去问问她。</p></div>"""
-                return self._send(page("对钩……？", body).encode())
+        if true_body is not None:
+            return self._send(page("真结局", true_body).encode())
+        if fake_body is not None:
+            # 提示区在锁外渲染，避免与 _hint_box 死锁
+            return self._send(page("对钩……？", fake_body + self._hint_box(8, player)).encode())
         err = "" if not key else "<p class='err'>❌ 访问码错误。再核对一遍，是不是还缺了一块？</p>"
         body = f"""<div class="box"><p class="frag">访问码</p>
 <p>访问码 = 你收集到的碎片，按关卡顺序首尾相接。</p>
 <p style="font-size:12px;color:#6b7683">也可以在地址栏直接访问 /final?key=&lt;访问码&gt;</p>
 {err}
 <form method="get"><input type="text" name="key" placeholder="例如 66b2cac2…" style="width:300px"><button>验证</button></form>
-</div>
-<div class="box">
-<p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她。</p>
-<p style="font-size:12px;color:#6b7683">卡住了？下方「专属提示码」可以换提示（一次性）。</p></div>"""
-        return self._send(page("终局", body + self._hint_box(8, player)).encode())
+</div>"""
+        return self._send(page("终局", body).encode())
 
     def _handle_vault(self, qs):
         """第 5 关保险库：便签 = md5(碎片5)，玩家枚举后两位撞库。"""
