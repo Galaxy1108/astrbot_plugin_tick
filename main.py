@@ -543,13 +543,16 @@ class Main(Star):
             player = str(it.get("player") or "")
             if not qq or not text:
                 continue
-            umo = await self._private_umo_for(qq)
+            umo = await self.get_kv_data(f"tick_umo_{player}", None)  # 玩家私聊过的真实通道
+            if not umo:
+                umo = await self._private_umo_for(qq)
             if not umo:
                 logger.warning(f"[tick] 无法构造私聊通道，验证码推送失败 qq={qq}")
                 await self._api("/api/outbox_done", {"ok": 0, "qq": qq, "player": player, "text": text})
                 continue
             try:
                 await self.context.send_message(umo, MessageChain(chain=[Plain(text)]))
+                logger.info(f"[tick] 验证码已私信 qq={qq}")
             except Exception as e:
                 logger.error(f"[tick] 验证码私信发送失败 qq={qq}: {e}")
                 await self._api("/api/outbox_done", {"ok": 0, "qq": qq, "player": player, "text": text})
