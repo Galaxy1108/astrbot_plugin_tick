@@ -800,6 +800,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/verify":
             return self._handle_api_verify(qs)
 
+        if path == "/api/challenge":
+            return self._handle_api_challenge(qs)
         if path == "/api/outbox":
             return self._handle_api_outbox(qs)
         if path == "/api/outbox_done":
@@ -895,8 +897,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             footer_extra = "1842 ＋ 偏移 3 → 4175（每一位相加，超过 9 就减 10）"
         return page(f"碎片 {stage}", body + self._hint_box(stage, player), check_stage=stage, footer_extra=footer_extra)
 
-    def _challenge_for(self, player: str) -> str:
-        """为玩家生成/复用验证码并投入推送队列，返回验证码。"""
+    def _challenge_for(self, player: str, push: bool = True) -> str:
+        """为玩家生成/复用验证码（可选投入推送队列），返回验证码。"""
         now = int(time.time())
         for c, ch in STATE["challenges"].items():
             if ch.get("player") == player and ch.get("expire", 0) > now and ch.get("tries", 0) < CHALLENGE_MAX_TRIES:
@@ -905,11 +907,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         p = STATE["players"].get(player)
         qq = p.get("qq") if p else None
         STATE["challenges"][code] = {"player": player, "qq": qq, "expire": now + CHALLENGE_TTL, "tries": 0}
-        if qq:
+        if qq and push:
             OUTBOX_ID[0] += 1
             STATE["outbox"].append({
                 "id": OUTBOX_ID[0], "qq": qq, "player": player,
-                "text": f"ζ 计划：检测到旧登录方式。验证码：{code}（10 分钟内有效）。回网页 /join 输入它，登录会自动更新。",
+                "text": f"ζ 计划：登录验证。验证码：{code}（10 分钟内有效）。回网页 /join 输入它，登录会自动更新。",
                 "ts": now,
             })
         save_state()
@@ -1004,6 +1006,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     page("玩家中心", body).encode(),
                     extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={token}; Path=/; Max-Age={SESS_TTL}"},
                 )
+            # 浏览器有 tick_sess 但会话已失效（踢下线/过期）→ 提示重新登录，绝不误建新玩家
+            if sess and not qs.get("fresh", [""])[0]:
+                return self._send(page("登录已失效", """<div class="box"><p class="err">登录已失效（可能已被管理员下线，或会话过期）。</p>
+<p>重新登录：私聊汐月发送 <code>/登录</code>，把回复给你的验证码填到下面：</p>
+<form method="get"><input type="text" name="verify" placeholder="6 位验证码" style="width:200px"><button>验证</button></form>
+<p style="font-size:12px;color:#6b7683">进度不会丢失。没有绑定过 QQ？<a href="/join?fresh=1">点这里创建全新身份</a></p></div>""").encode())
             # 全新访客：创建玩家并签发会话
             code = new_player()
             token = issue_session(code)
@@ -1730,6 +1738,21 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 STATE["notify_last"] = events[-1]["ts"] + 1
                 save_state()
         return self._json({"ok": True, "events": events})
+
+    def _handle_api_challenge(self, qs):
+        """私聊 /登录 触发：为玩家生成验证码（不入推送队列，由插件直接回复）。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        player = self._player_from(qs)
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._json({"ok": False, "err": "player not found"})
+            if not p.get("qq"):
+                return self._json({"ok": False, "err": "not bound"})
+            code = self._challenge_for(player, push=False)
+            save_state()
+        return self._json({"ok": True, "code": code})
 
     def _handle_api_outbox(self, qs):
         """插件轮询：取待推送的验证码私信（一次性，取后即删）。"""

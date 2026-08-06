@@ -297,6 +297,26 @@ class Main(Star):
             return
         yield event.plain_result(f"你的绑定码是：{code}。回网页 /join 输入它即可恢复进度。")
 
+    @filter.command("登录", alias={"login", "验证"})
+    @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
+    async def login_cmd(self, event: AstrMessageEvent):
+        """被踢下线/会话过期/换设备后重新登录：私聊本指令，验证码直接回复。"""
+        if not event.is_private_chat():
+            yield event.plain_result("私聊里才能说。")
+            return
+        qq = str(event.get_sender_id())
+        code = await self.get_kv_data(f"tick_qq_{qq}", None)
+        if not code:
+            yield event.plain_result("你还没有绑定过玩家身份。先去网页 /join 领取绑定码，再在群里 @我发送 /bind <绑定码>。")
+            return
+        ret = await self._api("/api/challenge", {"player": code})
+        if not ret or not ret.get("ok"):
+            yield event.plain_result("验证码生成失败，稍后再试。")
+            return
+        yield event.plain_result(
+            f"你的登录验证码：{ret['code']}（10 分钟内有效，用后即焚）。"
+            f"回网页 /join 输入它即可重新登录。")
+
     @filter.command("进度", alias={"progress"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def progress_cmd(self, event: AstrMessageEvent):
