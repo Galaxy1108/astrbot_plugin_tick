@@ -874,6 +874,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
         flash = ""
         with LOCK:
+            if qs.get("revoke"):
+                target = qs.get("revoke", [""])[0]
+                code = qs.get("code", [""])[0].strip().lower()
+                p = STATE["players"].get(target)
+                entry = (p.get("hintcodes") or {}).get(code) if p else None
+                if entry:
+                    entry["revoked"] = True
+                    if entry["kind"] == "h" and entry.get("level") == 2 and entry.get("stage"):
+                        p.setdefault("hint_req", {})[str(entry["stage"])] = {
+                            "ts": int(time.time()), "status": "pending"}
+                    p["last"] = int(time.time())
+                    save_state()
+                    flash = f"<div class='box'><p class='ok'>已手动吊销 {target} 的码 {code}。</p></div>"
+                else:
+                    flash = "<div class='box'><p class='err'>未找到该码。</p></div>"
             if qs.get("skip"):
                 target = qs.get("skip", [""])[0]
                 try:
@@ -930,7 +945,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         f"<tr><td><code>{c}</code></td><td>{code_label(e)}</td>"
                         f"<td class='{"done" if e.get("used") else "todo"}'>{"已用" if e.get("used") else "未用"}</td>"
                         f"<td class='{"err" if e.get("revoked") else "done"}'>{"已吊销" if e.get("revoked") else "正常"}</td>"
-                        f"<td>{time.strftime('%m-%d %H:%M', time.localtime(e['gen']))}</td></tr>"
+                        f"<td>{time.strftime('%m-%d %H:%M', time.localtime(e['gen']))}</td>"
+                        + (f"<td><a href='/admin?pass={ADMIN_TOKEN}&revoke={qs['view'][0]}&code={c}' style='color:#ff6b6b' "
+                           f"onclick=\"return confirm('确认吊销码 {c}？')\">吊销</a></td></tr>"
+                           if not e.get("used") and not e.get("revoked") else "<td>—</td></tr>")
                         for c, e in rows_v
                     )
                     frags = " ".join(vp["frags"])
