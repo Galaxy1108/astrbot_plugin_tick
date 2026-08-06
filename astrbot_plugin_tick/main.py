@@ -181,10 +181,10 @@ class Main(Star):
             "拿到绑定码之后记得私聊我，发送 /zeta。"
         )
 
-    # ---------- 通关播报（轮询网页 /api/finished） ----------
+    # ---------- 通关/进度播报（轮询网页 /api/events） ----------
 
     def _remember_group(self, event: AstrMessageEvent) -> None:
-        """记住指定群的会话标识（umo），供通关播报使用。"""
+        """记住指定群的会话标识（umo），供播报使用。"""
         if event.is_private_chat():
             return
         ng = str(self.config.get("notify_group", "") or "")
@@ -192,41 +192,49 @@ class Main(Star):
             return
         self._group_umo = event.unified_msg_origin
 
-    async def _notify_finished(self) -> None:
+    async def _notify_events(self) -> None:
         umo = getattr(self, "_group_umo", None)
         if not umo:
             return
         last = await self.get_kv_data("tick_notify_last", 0)
-        ret = await self._api("/api/finished", {"after": last})
+        ret = await self._api("/api/events", {"after": last})
         if not ret or not ret.get("ok"):
             return
         new_last = last
-        for e in ret.get("finished", []):
-            ts = e.get("final_ts", 0)
+        for e in ret.get("events", []):
+            ts = e.get("ts", 0)
             if ts <= last:
                 continue
             new_last = max(new_last, ts)
-            dur = max(1, ts - (e.get("created") or ts))
             qq = e.get("qq") or e.get("player")
             name = e.get("name") or qq
-            egg = "已找到彩蛋" if e.get("egg") else "彩蛋未找到"
-            minutes = dur // 60
-            hours = minutes // 60
-            dur_text = f"{hours} 小时 {minutes % 60} 分" if hours else f"{minutes} 分钟"
-            text = (
-                f"通关播报：{name}（{qq}）完成了「ζ 计划」全部 8 关！\n"
-                f"耗时：{dur_text} ｜ {egg}"
-            )
+            etype = e.get("type")
+            if etype == "stage":
+                text = f"通关快报：{name}（{qq}）通过了第 {e['stage']} 关！"
+            elif etype == "final":
+                dur = max(1, ts - (e.get("created") or ts))
+                minutes = dur // 60
+                hours = minutes // 60
+                dur_text = f"{hours} 小时 {minutes % 60} 分" if hours else f"{minutes} 分钟"
+                egg = "已找到彩蛋" if e.get("egg") else "彩蛋未找到"
+                text = (
+                    f"通关播报：{name}（{qq}）完成了「ζ 计划」全部 8 关！\n"
+                    f"耗时：{dur_text} ｜ {egg}"
+                )
+            elif etype == "egg":
+                text = f"彩蛋快报：{name}（{qq}）找到了隐藏结局！"
+            else:
+                continue
             try:
                 await self.context.send_message(umo, MessageChain(chain=[Plain(text)]))
             except Exception as e:
-                logger.error(f"[tick] 通关播报发送失败: {e}")
+                logger.error(f"[tick] 播报发送失败: {e}")
         await self.put_kv_data("tick_notify_last", new_last)
 
     async def _poll_loop(self) -> None:
         while True:
             try:
-                await self._notify_finished()
+                await self._notify_events()
             except Exception as e:
                 logger.error(f"[tick] 轮询失败: {e}")
             await asyncio.sleep(POLL_INTERVAL)

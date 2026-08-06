@@ -298,6 +298,7 @@ def new_player():
                 "qq": None,
                 "name": None,
                 "stages": {},
+                "stage_ts": {},
                 "final": False,
                 "final_ts": None,
                 "egg": False,
@@ -452,8 +453,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/api/decode":
             return self._handle_api_decode(qs)
 
-        if path == "/api/finished":
-            return self._handle_api_finished(qs)
+        if path == "/api/events":
+            return self._handle_api_events(qs)
 
         if path == "/api/stats":
             return self._handle_api_stats(qs)
@@ -516,8 +517,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             )
         with LOCK:
             p = STATE["players"][player]
+            now = int(time.time())
             p["stages"][str(stage)] = True
-            p["last"] = int(time.time())
+            p["stage_ts"][str(stage)] = now
+            p["last"] = now
             count, _ = player_progress(p)
             save_state()
         if stage == 8:
@@ -756,29 +759,31 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     })
         return self._json({"ok": True, "hits": hits})
 
-    def _handle_api_finished(self, qs):
-        """供插件轮询：返回 after 之后完成终局的玩家。"""
+    def _handle_api_events(self, qs):
+        """供插件轮询：返回 after 之后的全部事件（逐关通关/终局/彩蛋），按时间排序。"""
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
             return self._json({"ok": False, "err": "bad secret"}, 403)
         try:
             after = int(qs.get("after", ["0"])[0])
         except ValueError:
             after = 0
+        events = []
         with LOCK:
-            finished = [
-                {
-                    "player": player,
-                    "qq": p.get("qq"),
-                    "name": p.get("name"),
-                    "created": p.get("created", 0),
-                    "final_ts": p["final_ts"],
-                    "egg": p.get("egg", False),
-                }
-                for player, p in STATE["players"].items()
-                if p.get("final_ts") and p["final_ts"] > after
-            ]
-        finished.sort(key=lambda e: e["final_ts"])
-        return self._json({"ok": True, "finished": finished})
+            for player, p in STATE["players"].items():
+                qq, name = p.get("qq"), p.get("name")
+                for st, ts in (p.get("stage_ts") or {}).items():
+                    if ts > after:
+                        events.append({"type": "stage", "player": player, "qq": qq, "name": name,
+                                       "stage": int(st), "ts": ts})
+                if p.get("final_ts") and p["final_ts"] > after:
+                    events.append({"type": "final", "player": player, "qq": qq, "name": name,
+                                   "created": p.get("created", 0), "final_ts": p["final_ts"],
+                                   "egg": p.get("egg", False), "ts": p["final_ts"]})
+                if p.get("egg_ts") and p["egg_ts"] > after:
+                    events.append({"type": "egg", "player": player, "qq": qq, "name": name,
+                                   "ts": p["egg_ts"]})
+        events.sort(key=lambda e: e["ts"])
+        return self._json({"ok": True, "events": events})
 
     def _handle_api_stats(self, qs):
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
