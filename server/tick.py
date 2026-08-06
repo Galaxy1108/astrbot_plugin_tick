@@ -708,7 +708,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <li>回群里 @汐月 发送 <code>/bind &lt;绑定码&gt;</code>，绑定你的 QQ；</li>
 <li>然后从 <a href="/stage1"><b>第 1 关</b></a> 开始。</li>
 </ol>
-<p style="color:#6b7683">卡关时，私聊汐月用提示码换提示。</p>
+<p>苏桁的 AI「汐月」还在群里，每天照常聊天——她是这场游戏的接应人。</p>
+<p style="color:#6b7683">开始后<b>私聊汐月</b>：她会告诉你更多，卡关时也能用提示码换提示。</p>
 </div>"""
         return page("ζ 计划", body)
 
@@ -964,7 +965,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <pre>{FAKE_FLAG}</pre>
 <p style="color:#6b7683">「……？」 —— 苏桁</p></div>
 <div class="box"><p class="err">……感觉哪里不太对。</p>
-<p>像是缺了什么。真正的答案，好像从来都不在网页上。</p></div>"""
+<p>像是缺了什么。真正的答案，好像从来都不在网页上。</p>
+<p>苏桁的 AI 还活着。也许，该去问问她。</p></div>"""
                 return self._send(page("对钩……？", body).encode())
         body = f"""<div class="box"><p class="err">❌ 访问码错误。</p>
 <p>访问码 = 碎片按关卡顺序首尾相接。再核对一遍，是不是还缺了一块？</p>
