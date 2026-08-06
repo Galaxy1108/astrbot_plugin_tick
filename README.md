@@ -27,7 +27,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 ## 1. 入口与绑定
 
-1. 群里汐月的剧情台词提到"zeta" → 访问 `http://<服务器IP>:8080/zeta`
+1. 群里汐月的剧情台词提到"zeta" → 访问 `http://<服务器IP>:8899/zeta`
 2. 网页 `/join` 领取 **6 位绑定码**（写进浏览器 cookie）
 3. 群里 `@汐月 /bind <绑定码>` → 绑定 QQ 身份（后台可见）
 4. 私聊汐月 `/zeta` → 玩法说明
@@ -143,7 +143,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 # 四、后台（GM 面板）
 
-**位置**：`http://<公网IP>:8080/admin?pass=<管理口令>`
+**位置**：`http://<公网IP>:8899/admin?pass=<管理口令>`
 
 1. **第三层提示审批区**（顶部）：批准/驳回
 2. **泄密追溯**：输入截图里的 5 位一次性码 → 定位玩家/QQ/内容/时间/已用/已吊销
@@ -170,7 +170,7 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 ```powershell
 cd C:\tick-arg
-pm2 start tick.py --name tick-arg --interpreter "C:\Users\Administrator\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe" -- 8080
+pm2 start tick.py --name tick-arg --interpreter "C:\\Users\\Administrator\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\python.exe" -- 8899
 ```
 
 **管理口令**（务必改掉默认值）：
@@ -178,8 +178,8 @@ pm2 start tick.py --name tick-arg --interpreter "C:\Users\Administrator\AppData\
 $env:TICK_ADMIN_TOKEN="你的新口令"; pm2 restart tick-arg --update-env
 ```
 
-**防火墙**：Windows 防火墙放行 8080 + 阿里云安全组入方向 TCP 8080。
-入口：`http://<公网IP>:8080/`（首页 = 公告页，第 1 关在 `/stage1`，`/zeta` 已废弃）
+**防火墙**：Windows 防火墙放行 8899 + 阿里云安全组入方向 TCP 8899。
+入口：`http://<公网IP>:8899/`（首页 = 公告页，第 1 关在 `/stage1`，`/zeta` 已废弃）
 
 ## 部署后必须做
 
@@ -193,19 +193,19 @@ $env:TICK_ADMIN_TOKEN="你的新口令"; pm2 restart tick-arg --update-env
 
 ```bash
 # 领取绑定码
-curl -c cj.txt "http://localhost:8080/join"
+curl -c cj.txt "http://localhost:8899/join"
 # 模拟绑定 + 查进度（含个人碎片）
-curl "http://localhost:8080/api/bind?player=<码>&qq=1&name=T&secret=<口令>"
-curl "http://localhost:8080/api/progress?player=<码>&secret=<口令>"
+curl "http://localhost:8899/api/bind?player=<码>&qq=1&name=T&secret=<口令>"
+curl "http://localhost:8899/api/progress?player=<码>&secret=<口令>"
 # 逐关校验（用该玩家自己的碎片）
-curl -b cj.txt "http://localhost:8080/check?stage=1&ans=<碎片1>"
+curl -b cj.txt "http://localhost:8899/check?stage=1&ans=<碎片1>"
 # 假结局（7 块）与真结局（8 块）
-curl -b cj.txt "http://localhost:8080/final?key=<前7块>"
-curl -b cj.txt "http://localhost:8080/final?key=<8块>"
+curl -b cj.txt "http://localhost:8899/final?key=<前7块>"
+curl -b cj.txt "http://localhost:8899/final?key=<8块>"
 # 碎片核对（LLM 工具接口）
-curl "http://localhost:8080/api/verify?player=<码>&keys=<碎片1>,<碎片2>&secret=<口令>"
+curl "http://localhost:8899/api/verify?player=<码>&keys=<碎片1>,<碎片2>&secret=<口令>"
 # 后台
-curl "http://localhost:8080/admin?pass=<口令>"
+curl "http://localhost:8899/admin?pass=<口令>"
 ```
 
 ## 再生成素材

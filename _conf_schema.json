@@ -1,7 +1,7 @@
 {
   "web_base": {
     "type": "string",
-    "default": "http://127.0.0.1:8080",
+    "default": "http://127.0.0.1:8899",
     "description": "ζ 计划网页服务器地址（插件与网页同机时保持默认）"
   },
   "admin_token": {
@@ -16,7 +16,7 @@
   },
   "public_base": {
     "type": "string",
-    "default": "http://47.103.66.93:8080",
+    "default": "http://47.103.66.93:8899",
     "description": "玩家访问的公网入口（/zeta 指令给玩家看的网址）"
   }
 }
