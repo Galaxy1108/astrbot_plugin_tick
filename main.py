@@ -520,16 +520,17 @@ class Main(Star):
             await asyncio.sleep(POLL_INTERVAL)
 
     async def _private_umo_for(self, qq: str) -> str:
-        """为指定 QQ 构造私聊 umo（onebot 适配器可主动发私信）。"""
-        platform = ""
+        """为指定 QQ 构造私聊 umo（按已知私聊会话的适配器/类型格式）。"""
         for src in (getattr(self, "_group_umo", None),
                     await self.get_kv_data("tick_notify_umo", None)):
-            if src and ":private:" in str(src):
-                platform = str(src).split(":", 1)[0]
-                break
-        if not platform:
-            return ""
-        return f"{platform}:private:{qq}"
+            if not src:
+                continue
+            s = str(src)
+            if ":FriendMessage:" in s:
+                return f"{s.split(':', 1)[0]}:FriendMessage:{qq}"
+            if ":private:" in s:
+                return f"{s.split(':', 1)[0]}:private:{qq}"
+        return ""
 
     async def _push_challenges(self) -> None:
         """轮询网页推送队列，主动私信 QQ 发送鉴权验证码。"""
