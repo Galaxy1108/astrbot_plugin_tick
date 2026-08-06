@@ -1336,30 +1336,30 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
             for player, p in STATE["players"].items():
                 qq, name = p.get("qq"), p.get("name")
                 for st, ts in (p.get("stage_ts") or {}).items():
-                    if ts > after:
+                    if ts >= after:
                         events.append({"type": "stage", "player": player, "qq": qq, "name": name,
                                        "stage": int(st), "ts": ts})
-                if p.get("final_ts") and p["final_ts"] > after:
+                if p.get("final_ts") and p["final_ts"] >= after:
                     events.append({"type": "final", "player": player, "qq": qq, "name": name,
                                    "created": p.get("created", 0), "final_ts": p["final_ts"],
                                    "egg": p.get("egg", False), "ts": p["final_ts"]})
-                if p.get("egg_ts") and p["egg_ts"] > after:
+                if p.get("egg_ts") and p["egg_ts"] >= after:
                     events.append({"type": "egg", "player": player, "qq": qq, "name": name,
                                    "ts": p["egg_ts"]})
                 for st, r in (p.get("hint_req") or {}).items():
-                    if r.get("status") == "approved" and r.get("approved_ts", 0) > after:
+                    if r.get("status") == "approved" and r.get("approved_ts", 0) >= after:
                         events.append({"type": "hint_approved", "player": player, "qq": qq, "name": name,
                                        "stage": int(st), "ts": r["approved_ts"]})
-                    if r.get("status") == "rejected" and r.get("rejected_ts", 0) > after:
+                    if r.get("status") == "rejected" and r.get("rejected_ts", 0) >= after:
                         events.append({"type": "hint_rejected", "player": player, "qq": qq, "name": name,
                                        "stage": int(st), "ts": r["rejected_ts"],
                                        "reason": r.get("reason", "")})
             events.sort(key=lambda e: e["ts"])
-            # 推进并持久化通知指针
+            # 推进并持久化通知指针（+1 保证同秒事件不丢失也不重放）
             if events:
-                STATE["notify_last"] = events[-1]["ts"]
+                STATE["notify_last"] = events[-1]["ts"] + 1
             else:
-                STATE["notify_last"] = max(after, STATE.get("notify_last", 0))
+                STATE["notify_last"] = after + 1
             save_state()
         return self._json({"ok": True, "events": events})
 
