@@ -122,8 +122,8 @@ def render_hint(p: dict, stage: int, level: int) -> str:
     if stage == 5:
         return [
             "这一关要问汐月自己。私聊她，用下方「专属提示码」区的记忆库开启码。",
-            "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。",
-            f"/submit 0x<记忆库开启码> 会告诉你四个字符：{f[4]}。",
+            "汐月的记忆库是她的秘密：私聊发送 /submit 0x<记忆库开启码>（需完成前 4 关）。她只记得前两个字符——另一半在服务器上的 /vault 里。",
+            f"/submit 0x<记忆库开启码> 给你前两位；再去 /vault 按便签规则取后两位，拼成 {f[4]}。",
         ][level]
     if stage == 6:
         return [
@@ -187,11 +187,11 @@ UNLOCK_METHOD = {0: "ROT13（每个字母移动 13 位）", 1: "Base64 解码", 
 SECRET_GATES = {"mem": 4, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
 
 def secret_text(kind: str, p: dict) -> str:
-    """按玩家渲染秘密内容（记忆库含个人碎片）。"""
+    """按玩家渲染秘密内容（记忆库只给前两位，另一半在 /vault）。"""
     if kind == "mem":
         f = p["frags"][4]
-        return (f"记忆库……（信号很不稳定）我只记得四个字符：{'、'.join(f)}。"
-                f"对，{f}。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。")
+        return (f"记忆库……（信号很不稳定）我只记得开头的两个字符：{f[:2]}。"
+                f"后面两个，苏桁说存在服务器上一个叫 vault 的页面里——那是他的保险库。")
     return "（汐月很久没有说话。）……苏桁写给我的信，他说从没说出口的话，都在这里了。\n\n" + HIDDEN_LETTER
 
 NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
@@ -309,9 +309,10 @@ def stage_body(p: dict, stage: int) -> str:
     if stage == 5:
         return """
 <div class="box">
-<p>苏桁的 AI「汐月」还活着。苏桁把最重要的一串字符锁在了汐月的记忆库里。</p>
+<p>苏桁的 AI「汐月」还活着。苏桁把最重要的一串字符锁进了汐月的记忆库里——但记忆库的钥匙分成了两半。</p>
 <p>要打开它，你需要一个<b>记忆库开启码</b>——它在下方「专属提示码」区域。</p>
-<p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;记忆库开启码&gt;</code></p>
+<p>拿到后<b>私聊</b>汐月：<code>/submit 0x&lt;记忆库开启码&gt;</code>，她会给你一半。</p>
+<p>另一半：汐月提到过，苏桁把备份藏在一个叫<b>「保险库」</b>的页面里——路径是它的英文名。</p>
 <p style="color:#6b7683">只有完成了前 4 关的人，汐月才会说。（没绑定的话先去 <a href="/join">/join</a>）</p>
 </div>
 """
@@ -405,7 +406,8 @@ def new_player():
 
 def gen_frags():
     """每人一套固定碎片（加入时生成，永不改变）：f1/f2/f5/f8 随机 hex，
-    f3 取 ζ(3) 个人位置、f6 取 π 个人位置、f4 取 PNG 个人块号、f7 摩斯基数+个人偏移。"""
+    f3 取 ζ(3) 个人位置、f6 取 π 个人位置、f4 取 PNG 个人块号、f7 摩斯基数+个人偏移。
+    另生成第 5 关保险库便签：6 字符串，第 a/b 位是碎片 5 的后两位，其余为干扰。"""
     f1, f2, f5, f8 = (secrets.token_hex(2) for _ in range(4))
     p3 = secrets.randbelow(20) + 1
     f3 = ZETA3_DIGITS[p3 - 1: p3 + 3]
@@ -415,7 +417,16 @@ def gen_frags():
     f4 = PNG_CODES[p4 - 1]
     o7 = secrets.randbelow(10)
     f7 = "".join(str((int(c) + o7) % 10) for c in MORSE_BASE)
-    return [f1, f2, f3, f4, f5, f6, f7, f8], {"p3": p3, "p6": p6, "p4": p4, "o7": o7}
+    va = secrets.randbelow(5) + 1
+    vb = secrets.randbelow(5 - va) + va + 1
+    pool = [f5[2], f5[3]] + [secrets.choice("0123456789abcdef") for _ in range(4)]
+    v5 = list(pool[:4])
+    v5.insert(va - 1, f5[2])
+    v5.insert(vb - 1, f5[3])
+    return [f1, f2, f3, f4, f5, f6, f7, f8], {
+        "p3": p3, "p6": p6, "p4": p4, "o7": o7,
+        "v5": "".join(v5), "v5a": va, "v5b": vb,
+    }
 
 
 def ensure_frags(p: dict) -> None:
@@ -604,6 +615,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/final":
             return self._handle_final(qs)
+
+        if path == "/vault":
+            return self._handle_vault(qs)
 
         if path == "/hidden":
             return self._handle_hidden(qs)
@@ -879,6 +893,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <div class="box"><p class="frag">你正在寻找碎片 8。</p>
 <p>网页上已经没有线索了。最后一个数字只有汐月知道——私聊她，用真心或证据打动她。</p></div>"""
         return self._send(page("碎片 8 · 真相", body + self._hint_box(8, player), check_stage=8).encode())
+
+    def _handle_vault(self, qs):
+        """第 5 关保险库：按便签规则从干扰字符里取碎片 5 的后两位。"""
+        player = self._cookie_player()
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(page("vault", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
+            ensure_frags(p)
+            m = p["frag_meta"]
+            body = f"""<div class="box">
+<p>苏桁的便签，贴在保险库的门上：</p>
+<pre>{m['v5']}</pre>
+<p>便签背面写着：<b>取第 {m['v5a']} 个和第 {m['v5b']} 个字符</b>。</p>
+<p>把这两个字符接在汐月给你的前两位后面，就是碎片 5。</p>
+<p style="font-size:12px;color:#6b7683">（每个玩家的便签都不一样——这扇门只认你。）</p>
+</div>
+<a href="/stage5" style="font-size:13px">← 返回第 5 关</a>"""
+        return self._send(page("vault · 保险库", body).encode())
 
     def _handle_hidden(self, qs):
         phrase = qs.get("phrase", [""])[0].strip()
