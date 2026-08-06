@@ -12,14 +12,14 @@ class Main(Star):
     @filter.regex(r"记忆库.{0,6}密码|苏桁.{0,8}记忆库|记忆库.{0,8}苏桁")
     async def memory_code(self, event: AstrMessageEvent):
         yield event.plain_result(
-            "记忆库……（信号很不稳定）我只记得一串数字：三四八一。"
-            "对，3481。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。"
+            "记忆库……（信号很不稳定）我只记得四个字符：4、F、1、E。"
+            "对，4f1e。别问我为什么记得这个，苏桁说那是打开他记忆库的钥匙。"
         )
 
     @filter.regex(r"请出示你的访问凭证")
     async def credential(self, event: AstrMessageEvent):
         yield event.plain_result(
-            "……凭证核对中。校验通过。碎片七：4164。拿去吧，别说是我给的。"
+            "……凭证核对中。校验通过。碎片七：0888。拿去吧，别说是我给的。"
         )
 
     @filter.regex(r"苏桁|对钩")

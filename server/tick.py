@@ -6,9 +6,9 @@
 零依赖，仅用 Python 标准库。直接运行:
     python3 tick.py [port]        # 默认端口 8080
 
-关卡碎片（按顺序拼接即为最终访问码）:
-    1: 81fb   2: aa81   3: 7628   4: 85ac
-    5: 3481   6: fd4b   7: 4164   8: 85e6
+关卡碎片（按顺序拼接即为最终访问码，访问码 ≠ flag）:
+    1: 66b2   2: cac2   3: f48b   4: 7ada
+    5: 4f1e   6: 6f0e   7: 0888   8: 83d2
 """
 import http.server
 import socketserver
@@ -19,27 +19,27 @@ PORT = 8080
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
-FINAL_KEY = "81fbaa81762885ac3481fd4b416485e6"
+FINAL_KEY = "66b2cac2f48b7ada4f1e6f0e088883d2"
 FLAG = "flag{81fbaa81762885ac3481fd4b416485e6}"
 
 STAGE_ANSWERS = {
-    1: "81fb",
-    2: "aa81",
-    3: "7628",
-    4: "85ac",
-    5: "3481",
-    6: "fd4b",
-    7: "4164",
-    8: "85e6",
+    1: "66b2",
+    2: "cac2",
+    3: "f48b",
+    4: "7ada",
+    5: "4f1e",
+    6: "6f0e",
+    7: "0888",
+    8: "83d2",
 }
 
 STAGE_HINTS = {
-    1: "右键 -> 查看网页源代码，注意 HTML 注释。38 31 66 62 是十六进制，转成 ASCII。",
+    1: "右键 -> 查看网页源代码，注意 HTML 注释。36 36 62 32 是十六进制，转成 ASCII。",
     2: "base64 解码。打开 terminal 或者用任意在线工具都行。",
-    3: "1 加到 123 等于 123 * 124 / 2，再加 2。",
-    4: "把图片下载下来，用记事本/十六进制编辑器打开，搜索 85ac。PNG 的 tEXt 信息块里有东西。",
+    3: "1 加到 353 等于 353 * 354 / 2，再加 122，然后转成十六进制。",
+    4: "把图片下载下来，用记事本/十六进制编辑器打开，搜索 7ada。PNG 的 tEXt 信息块里有东西。",
     5: "在群里 @汐月，完整地问：汐月，苏桁的记忆库密码是什么？",
-    6: "每个字母往前移 2 位：h -> f，f -> d，数字不变。",
+    6: "每个字母往前移 2 位：h -> f，g -> e，数字不变。",
     7: "把页面上的那句话完整发给汐月，一个字都别改。",
     8: "每一页的右下角都有一个小签名。",
 }
@@ -70,7 +70,7 @@ footer { margin-top:60px; border-top:1px solid #222a33; padding-top:14px; font-s
 
 
 def page(title, body, check_stage=None, extra_head=""):
-    """渲染一个带统一头尾(右下角签名 85e6)的页面。"""
+    """渲染一个带统一头尾(右下角签名 83d2)的页面。"""
     check_html = ""
     if check_stage:
         check_html = f"""
@@ -94,7 +94,7 @@ function go(){{var v=document.getElementById('ans').value.trim().toLowerCase();
 {body}
 {check_html}
 <footer>苏桁 · f(x) = x + 1/x
-<span class="sign">◆ 85e6</span></footer>
+<span class="sign">◆ 83d2</span></footer>
 </body></html>"""
 
 
@@ -130,7 +130,7 @@ def build_static_pages():
 <p style="color:#6b7683">（如果不知道怎么看：右键点击页面空白处 → "查看网页源代码"）</p>
 <p>另外，服务器礼节：先去访问一下 <code>/robots.txt</code>。</p>
 </div>
-<!-- 38 31 66 62 -->
+<!-- 36 36 62 32 -->
 """,
         check_stage=1,
     )
@@ -139,7 +139,7 @@ def build_static_pages():
         """
 <div class="box">
 <p>你通过了 robots.txt 的指引找到了这个目录。苏桁留下了一句话，但显然他不想让人一眼看懂：</p>
-<pre>YWE4MQ==</pre>
+<pre>Y2FjMg==</pre>
 <p>把它解开，就是碎片 2。</p>
 </div>
 """,
@@ -151,10 +151,10 @@ def build_static_pages():
 <div class="box">
 <p>苏桁的草稿本上写着一小段代码，旁边批注："OI 人的浪漫。"</p>
 <pre>s = 0
-for i in range(1, 124):   # 1, 2, 3, ..., 123
+for i in range(1, 354):   # 1, 2, 3, ..., 353
     s += i
-s += 2
-print(s)   # 输出是多少？那就是碎片 3。</pre>
+s += 122
+print(hex(s))   # 去掉 0x 前缀，那就是碎片 3。</pre>
 </div>
 """,
         check_stage=3,
@@ -187,7 +187,7 @@ print(s)   # 输出是多少？那就是碎片 3。</pre>
         """
 <div class="box">
 <p>汐月悄悄塞给你一张纸条，上面只有一行字：</p>
-<pre>hf4d</pre>
+<pre>6h0g</pre>
 <p>纸条背面写着加密规则：<b>每个字母往前移 2 位，数字不变。</b></p>
 <p>解出来的四个字符，就是碎片 6。</p>
 </div>

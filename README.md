@@ -1,10 +1,12 @@
 # 对钩计划 (Project TICK) — ARG
 
-一个给 OI 选手 / 新手准备的解谜 ARG。目标：收集 8 个十六进制碎片，拼出访问码，换取
+一个给 OI 选手 / 新手准备的解谜 ARG。目标：收集 8 个十六进制碎片，拼出**访问码**，访问码打开最后一页，换取
 
 ```
 flag{81fbaa81762885ac3481fd4b416485e6}
 ```
+
+> 访问码 ≠ flag：8 个碎片拼出的只是"开锁钥匙"，flag 只在最终页出现。
 
 **背景**：数学系学生苏桁研究对钩函数 f(x)=x+1/x 后失踪。他的 AI「汐月」还在群里照常聊天。玩家通过他的服务器和他留下的谜题，拼出访问码。
 
@@ -21,16 +23,16 @@ flag{81fbaa81762885ac3481fd4b416485e6}
 
 | 关 | 答案 | 玩法 | 载体 |
 |----|------|------|------|
-| 1 | `81fb` | 查看首页源码，`38 31 66 62` hex→ASCII | `/tick` 注释 |
-| 2 | `aa81` | `robots.txt` → `/secret` → base64 `YWE4MQ==` | `/robots.txt` `/secret` |
-| 3 | `7628` | 求和 1..123 再加 2 | `/stage3` |
-| 4 | `85ac` | 下载 PNG，文本/十六进制编辑器搜 `85ac`（tEXt 块） | `/static/tick.png` |
-| 5 | `3481` | 群里问汐月「记忆库密码」 | 汐月 |
-| 6 | `fd4b` | 凯撒前移 2：`hf4d` | `/stage6` |
-| 7 | `4164` | 把凭证口令发给汐月 | 汐月 |
-| 8 | `85e6` | 每页右下角小签名 | 所有页面 |
+| 1 | `66b2` | 查看首页源码，`36 36 62 32` hex→ASCII | `/tick` 注释 |
+| 2 | `cac2` | `robots.txt` → `/secret` → base64 `Y2FjMg==` | `/robots.txt` `/secret` |
+| 3 | `f48b` | 求和 1..353 再加 122，转十六进制 | `/stage3` |
+| 4 | `7ada` | 下载 PNG，文本/十六进制编辑器搜 `7ada`（tEXt 块） | `/static/tick.png` |
+| 5 | `4f1e` | 群里问汐月「记忆库密码」 | 汐月 |
+| 6 | `6f0e` | 凯撒前移 2：`6h0g` | `/stage6` |
+| 7 | `0888` | 把凭证口令发给汐月 | 汐月 |
+| 8 | `83d2` | 每页右下角小签名 | 所有页面 |
 
-**访问码**：`81fbaa81762885ac3481fd4b416485e6` → 访问 `/final?key=<访问码>` 得到 flag。
+**访问码**：`66b2cac2f48b7ada4f1e6f0e088883d2` → 访问 `/final?key=<访问码>` 得到 flag。
 
 每关页面带答案输入框（`/check` 校验，答对亮对钩 ✅）、`/hint` 提示接口。
 
@@ -48,8 +50,8 @@ https://github.com/Galaxy1108/astrbot_plugin_tick
 
 | 说 | 汐月回 |
 |----|--------|
-| 汐月，苏桁的记忆库密码是什么？ | ……3481 |
-| 请出示你的访问凭证，我是苏桁的合作者。 | 碎片七：4164 |
+| 汐月，苏桁的记忆库密码是什么？ | ……4f1e |
+| 请出示你的访问凭证，我是苏桁的合作者。 | 碎片七：0888 |
 | 提到「苏桁」/「对钩」 | 剧情背景 + 网站线索 |
 | 提到「网站」/「网址」/「入口」 | 指向 tick |
 
@@ -73,11 +75,11 @@ Start-Process -FilePath "C:\Users\Administrator\AppData\Roaming\uv\python\cpytho
 
 ```bash
 # 每关答案
-for a in 81fb aa81 7628 85ac 3481 fd4b 4164 85e6; do
+for a in 66b2 cac2 f48b 7ada 4f1e 6f0e 0888 83d2; do
   curl -s "http://localhost:8080/check?stage=N&ans=$a"
 done
 # 终局
-curl "http://localhost:8080/final?key=81fbaa81762885ac3481fd4b416485e6"
+curl "http://localhost:8080/final?key=66b2cac2f48b7ada4f1e6f0e088883d2"
 ```
 
 ## 再生成素材
