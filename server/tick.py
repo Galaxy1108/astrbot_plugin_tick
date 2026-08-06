@@ -45,7 +45,8 @@ ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
 
 CODE_TTL = 600  # 一次性提示码自生成起 10 分钟有效
-HINT_COOLDOWN = 600  # 三层提示逐层解锁：每层间隔 10 分钟（自首次查看本关起算）
+# 三层提示解锁策略：第1层等 5 分钟，第2层等 20 分钟（自首次查看本关起算），第3层需管理员审批
+HINT_UNLOCK = {0: 300, 1: 1200, 2: None}
 
 FINAL_KEY = "66b2cac256907ada4f1e9999088883d2"
 FLAG_INNER = "81fbaa81762885ac3481fd4b416485e6"  # md5("我喜欢你")
@@ -129,6 +130,7 @@ SECRET_TEXTS = {
 SECRET_GATES = {"mem": 4, "cred": 6, "egg": None}  # 需要的通关数；egg 只在终局成功页签发
 
 NEXT_PAGE = {1: "/robots.txt", 2: "/stage3", 3: "/stage4", 4: "/stage5", 5: "/stage6", 6: "/stage7", 7: "/final"}
+STAGE_PATHS = {1: "/zeta", 2: "/secret", 3: "/stage3", 4: "/stage4", 5: "/stage5", 6: "/stage6", 7: "/stage7", 8: "/final"}
 
 PAGE_CSS = """
 body { background:#0e1116; color:#d7dde4; font-family:"Microsoft YaHei",system-ui,sans-serif;
@@ -301,6 +303,7 @@ def new_player():
                 "stages": {},
                 "stage_ts": {},
                 "hint_gen": {},
+                "hint_req": {},
                 "final": False,
                 "final_ts": None,
                 "egg": False,
@@ -366,7 +369,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return ""
 
     def _hint_box(self, stage: int, player: str):
-        """本关专属提示码区域（三层提示逐层解锁，每层间隔 HINT_COOLDOWN 秒）。"""
+        """本关专属提示码区域：第1层等5分钟、第2层等20分钟、第3层需管理员审批。"""
         with LOCK:
             p = STATE["players"].get(player)
             if not p:
@@ -380,13 +383,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 p["hint_gen"][str(stage)] = now
             lines = []
             for lv in range(3):
-                unlock_at = first + HINT_COOLDOWN * lv
-                if now >= unlock_at:
-                    c = issue_code(p, "h", stage, lv)
-                    lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code></p>")
+                wait = HINT_UNLOCK.get(lv)
+                if wait is not None:
+                    unlock_at = first + wait
+                    if now >= unlock_at:
+                        c = issue_code(p, "h", stage, lv)
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code></p>")
+                    else:
+                        mins = max(1, (unlock_at - now + 59) // 60)
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#6b7683'>解锁中，还需约 {mins} 分钟</span></p>")
                 else:
-                    mins = max(1, (unlock_at - now + 59) // 60)
-                    lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#6b7683'>解锁中，还需约 {mins} 分钟</span></p>")
+                    req = (p.get("hint_req") or {}).get(str(stage))
+                    if req and req.get("status") == "approved":
+                        c = issue_code(p, "h", stage, lv)
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code>（已通过审批）</p>")
+                    elif req and req.get("status") == "pending":
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ffd479'>已提交申请，等待管理员审批</span></p>")
+                    elif req and req.get("status") == "rejected":
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ff6b6b'>申请被驳回</span> <a href='/request?stage={stage}'>重新申请</a></p>")
+                    else:
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<a href='/request?stage={stage}'>点击申请（需管理员审批）</a></p>")
             save_state()
             extra = ""
             if stage == 5:
@@ -396,7 +412,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 extra = f"<p style='color:#ffd479'>凭证码：<code>/submit 0x{issue_code(p, 'cred', 7, None)}</code></p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>三层提示<b>逐层解锁</b>（每层间隔 10 分钟，自首次打开本页起算）；每个码每人只能用一次，自生成起 10 分钟有效。刷新页面查看最新进度。</p>
+<p>第 1 层等 5 分钟解锁，第 2 层等 20 分钟（自首次打开本页起算），第 3 层需提交申请、由管理员审批。
+每个码每人只能用一次，自生成起 10 分钟有效。刷新页面查看最新进度。</p>
 {''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
 
@@ -425,6 +442,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/join":
             return self._handle_join(qs)
+
+        if path == "/request":
+            return self._handle_request(qs)
 
         if path == "/zeta":
             return self._send(self._stage_page(1).encode())
@@ -506,6 +526,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
             page("玩家中心", body).encode(),
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
         )
+
+    def _handle_request(self, qs):
+        """第 3 层提示申请（需管理员在 /admin 审批）。"""
+        player = self._cookie_player()
+        try:
+            stage = int(qs.get("stage", ["0"])[0])
+        except ValueError:
+            return self._send("参数错误", "text/plain")
+        if stage not in STAGE_ANSWERS:
+            return self._send("没有这一关。", "text/plain")
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(page("申请", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
+            req = (p.get("hint_req") or {}).get(str(stage))
+            if req and req.get("status") == "pending":
+                body = f"""<div class="box"><p class="frag">申请已提交</p>
+<p>第 {stage} 关的第三层提示申请正在等待管理员审批，稍后再来刷新本页。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关</a></p></div>"""
+                return self._send(page("申请", body).encode())
+            p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "pending"}
+            p["last"] = int(time.time())
+            save_state()
+        body = f"""<div class="box"><p class="frag">申请已提交</p>
+<p>第 {stage} 关的第三层提示申请已发出，管理员审批通过后，刷新本关页面即可看到提示码。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关</a></p></div>"""
+        return self._send(page("申请", body).encode())
 
     def _handle_check(self, qs):
         try:
@@ -604,6 +651,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _handle_admin(self, qs):
         if qs.get("pass", [""])[0] != ADMIN_TOKEN:
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
+        flash = ""
+        with LOCK:
+            if qs.get("approve") or qs.get("reject"):
+                target = (qs.get("approve") or qs.get("reject") or [""])[0]
+                try:
+                    stage = int(qs.get("stage", ["0"])[0])
+                except ValueError:
+                    stage = 0
+                p = STATE["players"].get(target)
+                if p and stage in STAGE_ANSWERS:
+                    if qs.get("approve"):
+                        issue_code(p, "h", stage, 2)
+                        p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "approved"}
+                        flash = f"<div class='box'><p class='ok'>已批准 {target} 的第 {stage} 关第三层提示。</p></div>"
+                    else:
+                        p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "rejected"}
+                        flash = f"<div class='box'><p class='err'>已驳回 {target} 的第 {stage} 关申请。</p></div>"
+                    save_state()
         decode_html = ""
         if qs.get("code", [""])[0]:
             import urllib.request
@@ -627,6 +692,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 decode_html = f"<div class='box'><p class='err'>一次性码 {code} 无匹配。</p></div>"
         with LOCK:
             rows = sorted(STATE["players"].items(), key=lambda kv: kv[1]["last"], reverse=True)
+            pending = []
+            for player, p in STATE["players"].items():
+                for st, r in (p.get("hint_req") or {}).items():
+                    if r.get("status") == "pending":
+                        pending.append((player, p, int(st), r))
+        pending_html = ""
+        if pending:
+            prow = "".join(
+                f"<tr><td>{player}</td><td>{p.get('qq') or '—'}</td><td>{p.get('name') or '—'}</td>"
+                f"<td>{st}</td><td>{time.strftime('%m-%d %H:%M', time.localtime(r['ts']))}</td>"
+                f"<td><a href='/admin?pass={ADMIN_TOKEN}&approve={player}&stage={st}' style='color:#6ee7a0'>批准</a> "
+                f"<a href='/admin?pass={ADMIN_TOKEN}&reject={player}&stage={st}' style='color:#ff6b6b'>驳回</a></td></tr>"
+                for player, p, st, r in pending
+            )
+            pending_html = f"""<div class="box"><p class="frag">第三层提示审批（{len(pending)} 个待处理）</p>
+<table><tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>关卡</th><th>申请时间</th><th>操作</th></tr>{prow}</table></div>"""
         lines = []
         for code, p in rows:
             count, mx = player_progress(p)
@@ -645,7 +726,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         head = ("<tr><th>绑定码</th><th>QQ</th><th>昵称</th><th>进度</th>"
                 + "".join(f"<th>{i}</th>" for i in range(1, 9))
                 + "<th>终局</th><th>彩蛋</th><th>已用码</th><th>最后活跃</th></tr>")
-        body = f"""<div class="box">
+        body = f"""{flash}{pending_html}<div class="box">
 <p>玩家总数：{len(rows)} ｜ 通关终局：{sum(1 for _, p in rows if p['final'])} ｜ 找到彩蛋：{sum(1 for _, p in rows if p.get('egg'))}</p>
 <p style="font-size:12px;color:#6b7683">泄密追溯：输入截图里的 5 位一次性码，定位是哪个玩家、哪条内容、什么时间。</p>
 <form method="get"><input type="hidden" name="pass" value="{ADMIN_TOKEN}">
@@ -682,10 +763,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             now = int(time.time())
             kind, stage, level = entry["kind"], entry.get("stage"), entry.get("level")
             if kind == "h":
-                first = (p.get("hint_gen") or {}).get(str(stage), 0)
-                if now - first < HINT_COOLDOWN * level:
-                    return self._json({"ok": True, "status": "notyet",
-                                       "wait": HINT_COOLDOWN * level - (now - first)})
+                wait = HINT_UNLOCK.get(level)
+                if wait is not None:
+                    first = (p.get("hint_gen") or {}).get(str(stage), 0)
+                    if now - first < wait:
+                        return self._json({"ok": True, "status": "notyet",
+                                           "wait": wait - (now - first)})
+                else:
+                    req = (p.get("hint_req") or {}).get(str(stage))
+                    if not (req and req.get("status") == "approved"):
+                        return self._json({"ok": True, "status": "notyet", "wait": 0})
                 _, mx = player_progress(p)
                 if stage - 1 > mx:
                     return self._json({"ok": True, "status": "gated", "need": stage - 1})
