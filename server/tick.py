@@ -948,8 +948,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if qs.get("pass", [""])[0] != ADMIN_TOKEN:
             return self._send(page("拒绝访问", "<div class='box'><p class='err'>口令错误。</p></div>").encode(), code=403)
         flash = ""
+        acted = False
         with LOCK:
             if qs.get("revoke"):
+                acted = True
                 target = qs.get("revoke", [""])[0]
                 code = qs.get("code", [""])[0].strip().lower()
                 p = STATE["players"].get(target)
@@ -961,10 +963,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             "ts": int(time.time()), "status": "pending"}
                     p["last"] = int(time.time())
                     save_state()
-                    flash = f"<div class='box'><p class='ok'>已手动吊销 {target} 的码 {code}。</p></div>"
+                    flash = f"已手动吊销 {target} 的码 {code}。"
                 else:
-                    flash = "<div class='box'><p class='err'>未找到该码。</p></div>"
+                    flash = "未找到该码。"
             if qs.get("skip"):
+                acted = True
                 target = qs.get("skip", [""])[0]
                 try:
                     stage = int(qs.get("stage", ["0"])[0])
@@ -976,18 +979,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if p and stage in (1, 2, 3, 4, 5, 6, 7, 8) and wait is not None:
                     p.setdefault("hint_gen", {})[str(stage)] = int(time.time()) - wait
                     save_state()
-                    flash = f"<div class='box'><p class='ok'>已为 {target} 跳过第 {stage} 关{HINT_LABELS[lv]}冷却。</p></div>"
+                    flash = f"已为 {target} 跳过第 {stage} 关{HINT_LABELS[lv]}冷却。"
             if qs.get("del"):
+                acted = True
                 target = qs.get("del", [""])[0]
                 if target in STATE["players"]:
                     del STATE["players"][target]
                     save_state()
-                    flash = f"<div class='box'><p class='ok'>已删除玩家 {target}。</p></div>"
+                    flash = f"已删除玩家 {target}。"
             if qs.get("reset", [""])[0] == "1":
+                acted = True
                 STATE["players"] = {}
                 save_state()
-                flash = "<div class='box'><p class='ok'>已清空全部玩家数据。</p></div>"
+                flash = "已清空全部玩家数据。"
             if qs.get("approve") or qs.get("reject"):
+                acted = True
                 target = (qs.get("approve") or qs.get("reject") or [""])[0]
                 try:
                     stage = int(qs.get("stage", ["0"])[0])
@@ -999,14 +1005,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         issue_code(p, "h", stage, 2)
                         p.setdefault("hint_req", {})[str(stage)] = {
                             "ts": int(time.time()), "status": "approved", "approved_ts": int(time.time())}
-                        flash = f"<div class='box'><p class='ok'>已批准 {target} 的第 {stage} 关第三层提示。</p></div>"
+                        flash = f"已批准 {target} 的第 {stage} 关第三层提示。"
                     else:
                         reason = qs.get("reason", [""])[0].strip()[:100]
                         p.setdefault("hint_req", {})[str(stage)] = {
                             "ts": int(time.time()), "status": "rejected",
                             "rejected_ts": int(time.time()), "reason": reason}
-                        flash = f"<div class='box'><p class='err'>已驳回 {target} 的第 {stage} 关申请。</p></div>"
+                        flash = f"已驳回 {target} 的第 {stage} 关申请。"
                     save_state()
+        if acted:
+            # 动作执行后重定向到干净 URL：防止刷新重复执行（如 reset=1 每次刷新清空）
+            return self._redirect(f"/admin?pass={ADMIN_TOKEN}&msg={urllib.parse.quote(flash)}")
+        flash = f"<div class='box'><p class='ok'>{qs.get('msg', [''])[0]}</p></div>" if qs.get("msg", [""])[0] else ""
         decode_html = ""
         if qs.get("view"):
             with LOCK:
@@ -1067,11 +1077,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <table><tr><th>码</th><th>内容</th><th>状态</th><th>吊销</th><th>生成时间</th></tr>{ledger}</table>
 <p><a href="/admin?pass={ADMIN_TOKEN}">← 返回总表</a></p></div>"""
         if qs.get("code", [""])[0]:
-            import urllib.request
+            import urllib.request as urlreq
             code = qs.get("code", [""])[0].strip().lower()
-            req = urllib.request.Request(f"http://127.0.0.1:{PORT}/api/decode?code={urllib.parse.quote(code)}&secret={ADMIN_TOKEN}")
+            req = urlreq.Request(f"http://127.0.0.1:{PORT}/api/decode?code={urllib.parse.quote(code)}&secret={ADMIN_TOKEN}")
             try:
-                with urllib.request.urlopen(req, timeout=5) as resp:
+                with urlreq.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode())
             except Exception:
                 data = {"hits": []}
