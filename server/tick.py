@@ -1015,7 +1015,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <p>访问码验证通过。苏桁留给你的话：</p>
 <pre>{FAKE_FLAG}</pre>
 </div>
-<div class="box"><p class="err">……感觉哪里不太对。</p></div>"""
+<div class="box"><p class="err">……感觉哪里不太对。</p>
+<p>以苏桁的性格，他不会就这样把一切留在网页上。</p>
+<p>而苏桁的 AI……她应该知道些什么。</p></div>"""
         if true_body is not None:
             return self._send(page("真结局", true_body).encode())
         if fake_body is not None:
