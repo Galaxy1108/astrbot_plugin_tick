@@ -276,8 +276,8 @@ def secret_svg(b64: str) -> str:
   <rect width="360" height="180" fill="#0e1116"/>
   <path d="M 20 150 C 70 135, 110 125, 150 105 S 250 45, 340 14" stroke="#6ee7a0" stroke-width="2" fill="none"/>
   <circle cx="150" cy="105" r="3.5" fill="#22c55e"/>
-  <text x="18" y="26" font-family="monospace" font-size="12" fill="#1a222c">{b64}</text>
-  <text x="300" y="166" font-family="monospace" font-size="10" fill="#16202a">f(x) = x + 1/x</text>
+  <text x="18" y="26" font-family="monospace" font-size="12" fill="#0e1116">{b64}</text>
+  <text x="300" y="166" font-family="monospace" font-size="10" fill="#0e1116">f(x) = x + 1/x</text>
 </svg>""".format(b64=b64)
 
 
@@ -299,7 +299,6 @@ def stage_body(p: dict, stage: int) -> str:
         b64 = _b64.b64encode(f[1].encode()).decode()
         return f"""
 <div class="box">
-<p>你通过了 robots.txt 的指引找到了这个目录。苏桁只留下了一张图：</p>
 {secret_svg(b64)}
 </div>
 """
