@@ -227,7 +227,7 @@ STAGE_PAGES = {
 
 PAGE_CSS = """
 body { background:#0e1116; color:#d7dde4; font-family:"Microsoft YaHei",system-ui,sans-serif;
-       max-width:780px; margin:0 auto; padding:32px 20px 80px; line-height:1.8; }
+       max-width:1100px; margin:0 auto; padding:32px 20px 80px; line-height:1.8; }
 h1 { color:#6ee7a0; font-size:22px; }
 h2 { color:#6ee7a0; font-size:18px; }
 a { color:#7ab8ff; }
