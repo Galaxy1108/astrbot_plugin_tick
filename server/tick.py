@@ -1374,7 +1374,8 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                 label = {"mem": "记忆库", "cred": "凭证", "egg": "彩蛋"}.get(kind, kind)
                 if kind == "egg":
                     p["egg"] = True
-                    p["egg_ts"] = now_ms()
+                    if not p.get("egg_ts"):
+                        p["egg_ts"] = now_ms()  # 仅首次解锁记录，重复触发不产生新事件
             entry["used"] = True
             p["last"] = now
             save_state()
