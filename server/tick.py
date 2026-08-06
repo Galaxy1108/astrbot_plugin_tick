@@ -12,7 +12,7 @@
 
 一次性提示码系统:
     每关页面按玩家动态签发 3 层提示码 + 记忆库/凭证/彩蛋码（每人每码唯一）。
-    码自生成起 CODE_TTL 秒有效、用一次即焚；私聊汐月 /submit 0x<码> 统一兑换。
+    码无时间限制、用完即焚、只认本人；发到群聊会被立即吊销（需重新生成/申请）。私聊汐月 /submit 0x<码> 统一兑换。
     后台 /admin 输入泄露的码可定位泄密者。
 
 路由:
@@ -44,7 +44,7 @@ DATA_DIR = BASE_DIR / "data"
 ADMIN_TOKEN = os.environ.get("TICK_ADMIN_TOKEN", "tick-admin-9c4f2b7a1d")
 COOKIE_NAME = "tick_player"
 
-CODE_TTL = 600  # 一次性提示码自生成起 10 分钟有效
+# 提示码规则：无时间限制、手动点击生成、用完即焚；发到群聊会被立即吊销（需重新生成/申请）
 # 三层提示解锁策略：第1层等 5 分钟，第2层等 20 分钟（自首次查看本关起算），第3层需管理员审批
 HINT_UNLOCK = {0: 300, 1: 1200, 2: None}
 
@@ -321,19 +321,31 @@ def player_progress(p):
 
 
 def issue_code(p: dict, kind: str, stage: int, level: int | None) -> str:
-    """签发/复用一枚一次性码（每人每码唯一，自生成起 CODE_TTL 秒有效）。"""
-    now = int(time.time())
+    """签发/复用一枚提示码（每人每码唯一，无时间限制；被吊销后重新生成）。"""
     codes = p.setdefault("hintcodes", {})
     for code, e in codes.items():
         if (e["kind"], e.get("stage"), e.get("level")) == (kind, stage, level) \
-                and not e.get("used") and now - e["gen"] <= CODE_TTL:
+                and not e.get("used") and not e.get("revoked"):
             return code
     while True:
         code = secrets.token_hex(3)[:5]
         if code not in codes:
             break
-    codes[code] = {"kind": kind, "stage": stage, "level": level, "gen": now, "used": False}
+    codes[code] = {"kind": kind, "stage": stage, "level": level,
+                   "gen": int(time.time()), "used": False, "revoked": False}
     return code
+
+
+def code_line(p: dict, kind: str, stage: int, level: int | None, gen_url: str) -> str:
+    """渲染一枚码的状态：未生成→按钮；已生成→显示；已用/已吊销→提示。"""
+    for code, e in p.setdefault("hintcodes", {}).items():
+        if (e["kind"], e.get("stage"), e.get("level")) == (kind, stage, level):
+            if e.get("used"):
+                return f"<code>/submit 0x{code}</code>（已使用）"
+            if e.get("revoked"):
+                return f"<span style='color:#ff6b6b'>已吊销</span> <a href='{gen_url}'>重新生成</a>"
+            return f"<code>/submit 0x{code}</code>"
+    return f"<a href='{gen_url}'>点击生成提示码</a>"
 
 
 # ---------------- HTTP ----------------
@@ -369,12 +381,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return ""
 
     def _hint_box(self, stage: int, player: str):
-        """本关专属提示码区域：第1层等5分钟、第2层等20分钟、第3层需管理员审批。"""
+        """本关专属提示码区域：全部手动生成；第1层等5分钟、第2层等20分钟、第3层需审批。"""
         with LOCK:
             p = STATE["players"].get(player)
             if not p:
                 return """<div class="box"><p class="frag">专属提示码</p>
-<p>领取绑定码后，这里会显示你的专属提示码（每人每码唯一，用完即焚）。</p>
+<p>领取绑定码后，这里可以手动生成你的专属提示码。</p>
 <p><a href="/join">去 /join 领取绑定码</a></p></div>"""
             now = int(time.time())
             first = p.setdefault("hint_gen", {}).get(str(stage))
@@ -383,20 +395,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 p["hint_gen"][str(stage)] = now
             lines = []
             for lv in range(3):
+                gen_url = f"/generate?stage={stage}&lv={lv}"
                 wait = HINT_UNLOCK.get(lv)
                 if wait is not None:
                     unlock_at = first + wait
                     if now >= unlock_at:
-                        c = issue_code(p, "h", stage, lv)
-                        lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code></p>")
+                        lines.append(f"<p>{HINT_LABELS[lv]}：{code_line(p, 'h', stage, lv, gen_url)}</p>")
                     else:
                         mins = max(1, (unlock_at - now + 59) // 60)
                         lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#6b7683'>解锁中，还需约 {mins} 分钟</span></p>")
                 else:
                     req = (p.get("hint_req") or {}).get(str(stage))
                     if req and req.get("status") == "approved":
-                        c = issue_code(p, "h", stage, lv)
-                        lines.append(f"<p>{HINT_LABELS[lv]}：<code>/submit 0x{c}</code>（已通过审批）</p>")
+                        lines.append(f"<p>{HINT_LABELS[lv]}：{code_line(p, 'h', stage, lv, gen_url)}（已通过审批）</p>")
                     elif req and req.get("status") == "pending":
                         lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ffd479'>已提交申请，等待管理员审批</span></p>")
                     elif req and req.get("status") == "rejected":
@@ -406,14 +417,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             save_state()
             extra = ""
             if stage == 5:
-                extra = f"<p style='color:#ffd479'>记忆库开启码：<code>/submit 0x{issue_code(p, 'mem', 5, None)}</code></p>"
+                extra = f"<p style='color:#ffd479'>记忆库开启码：{code_line(p, 'mem', 5, None, '/generate?stage=5&kind=mem')}</p>"
                 save_state()
             if stage == 7:
-                extra = f"<p style='color:#ffd479'>凭证码：<code>/submit 0x{issue_code(p, 'cred', 7, None)}</code></p>"
+                extra = f"<p style='color:#ffd479'>凭证码：{code_line(p, 'cred', 7, None, '/generate?stage=7&kind=cred')}</p>"
                 save_state()
             return f"""<div class="box"><p class="frag">专属提示码</p>
-<p>第 1 层等 5 分钟解锁，第 2 层等 20 分钟（自首次打开本页起算），第 3 层需提交申请、由管理员审批。
-每个码每人只能用一次，自生成起 10 分钟有效。刷新页面查看最新进度。</p>
+<p>提示码<b>手动点击生成</b>，无时间限制、用完即焚、只认本人——发到群聊会被立即吊销，需重新生成/申请。</p>
+<p>第 1 层等 5 分钟解锁，第 2 层等 20 分钟（自首次打开本页起算），第 3 层需提交申请、由管理员审批。</p>
 {''.join(lines)}{extra}
 <p style="font-size:12px;color:#6b7683">码是你一个人的，截图会被追责。</p></div>"""
 
@@ -445,6 +456,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/request":
             return self._handle_request(qs)
+
+        if path == "/generate":
+            return self._handle_generate(qs)
 
         if path == "/zeta":
             return self._send(self._stage_page(1).encode())
@@ -484,6 +498,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/decode":
             return self._handle_api_decode(qs)
+
+        if path == "/api/revoke":
+            return self._handle_api_revoke(qs)
 
         if path == "/api/events":
             return self._handle_api_events(qs)
@@ -526,6 +543,68 @@ class Handler(http.server.BaseHTTPRequestHandler):
             page("玩家中心", body).encode(),
             extra_headers={f"Set-Cookie": f"{COOKIE_NAME}={code}; Path=/; Max-Age=2592000"},
         )
+
+    def _handle_generate(self, qs):
+        """手动生成提示码。已使用的码不可再生成；被吊销的码可重新生成。"""
+        player = self._cookie_player()
+        kind = qs.get("kind", ["h"])[0]
+        with LOCK:
+            p = STATE["players"].get(player)
+            if not p:
+                return self._send(page("生成", "<div class='box'><p class='err'>请先到 <a href='/join'>/join</a> 领取绑定码。</p></div>").encode())
+            now = int(time.time())
+            if kind == "h":
+                try:
+                    stage = int(qs.get("stage", ["0"])[0])
+                    lv = int(qs.get("lv", ["0"])[0])
+                except ValueError:
+                    return self._send("参数错误", "text/plain")
+                if stage not in STAGE_ANSWERS or lv not in (0, 1, 2):
+                    return self._send("参数错误", "text/plain")
+                wait = HINT_UNLOCK.get(lv)
+                if wait is not None:
+                    first = p.setdefault("hint_gen", {}).get(str(stage))
+                    if first is None:
+                        first = now
+                        p["hint_gen"][str(stage)] = now
+                    if now - first < wait:
+                        mins = max(1, (wait - (now - first) + 59) // 60)
+                        body = f"""<div class="box"><p class="err">还没到时间。</p>
+<p>{HINT_LABELS[lv]}还需约 {mins} 分钟解锁，过会儿再来点「生成」。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关</a></p></div>"""
+                        return self._send(page("生成", body).encode())
+                else:
+                    req = (p.get("hint_req") or {}).get(str(stage))
+                    if not (req and req.get("status") == "approved"):
+                        body = f"""<div class="box"><p class="err">未通过审批。</p>
+<p>{HINT_LABELS[lv]}需要管理员审批通过后才能生成，<a href="/request?stage={stage}">去申请</a>。</p>
+<p><a href="{STAGE_PATHS[stage]}">← 返回本关</a></p></div>"""
+                        return self._send(page("生成", body).encode())
+                issue_code(p, "h", stage, lv)
+                save_state()
+                return self._redirect(STAGE_PATHS[stage])
+            if kind == "mem":
+                issue_code(p, "mem", 5, None)
+                save_state()
+                return self._redirect("/stage5")
+            if kind == "cred":
+                issue_code(p, "cred", 7, None)
+                save_state()
+                return self._redirect("/stage7")
+            if kind == "egg":
+                if not p.get("final"):
+                    return self._send(page("生成", "<div class='box'><p class='err'>彩蛋码需要先通关终局。</p></div>").encode())
+                issue_code(p, "egg", 0, None)
+                save_state()
+                return self._redirect("/final?key=" + FINAL_KEY)
+        return self._send("参数错误", "text/plain")
+
+    def _redirect(self, path: str):
+        self.send_response(302)
+        self.send_header("Location", path)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+        return None
 
     def _handle_request(self, qs):
         """第 3 层提示申请（需管理员在 /admin 审批）。"""
@@ -603,11 +682,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     p["final"] = True
                     p["final_ts"] = int(time.time())
                     p["last"] = int(time.time())
-                    ec = issue_code(p, "egg", 0, None)
                     save_state()
                     note = f"<p style='color:#6b7683'>玩家 {player}{'（' + str(p['qq']) + '）' if p['qq'] else ''} 已通关。</p>"
                     egg_box = f"""<div class="box"><p class="frag">隐藏结局开启码</p>
-<p>私聊汐月发送 <code>/submit 0x{ec}</code>，读苏桁写给汐月的信。</p>
+<p>{code_line(p, 'egg', 0, None, '/generate?kind=egg')}</p>
+<p style="font-size:12px;color:#6b7683">生成后私聊汐月发送 <code>/submit 0x&lt;码&gt;</code>，读苏桁写给汐月的信。</p>
 <p style="font-size:12px;color:#6b7683">另一个线索：这串十六进制 <code>{FLAG_INNER}</code> 是苏桁一句四个字真心话的摘要——猜出它，去 <code>/hidden</code> 认领。</p></div>"""
             body = f"""<div class="box"><h2 style="margin-top:0">✅ 对钩！</h2>
 <p>访问码验证通过。苏桁留给你的话：</p>
@@ -663,7 +742,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if p and stage in STAGE_ANSWERS:
                     if qs.get("approve"):
                         issue_code(p, "h", stage, 2)
-                        p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "approved"}
+                        p.setdefault("hint_req", {})[str(stage)] = {
+                            "ts": int(time.time()), "status": "approved", "approved_ts": int(time.time())}
                         flash = f"<div class='box'><p class='ok'>已批准 {target} 的第 {stage} 关第三层提示。</p></div>"
                     else:
                         p.setdefault("hint_req", {})[str(stage)] = {"ts": int(time.time()), "status": "rejected"}
@@ -682,12 +762,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if data.get("hits"):
                 rows = "".join(
                     f"<tr><td>{h['player']}</td><td>{h['qq'] or '—'}</td><td>{h['label']}</td>"
-                    f"<td>{h['time']}</td><td class='{"done" if h.get("valid") else "todo"}'>{"有效" if h.get("valid") else "已过期"}</td>"
-                    f"<td class='{"done" if h.get("used") else "todo"}'>{"已用" if h.get("used") else "未用"}</td></tr>"
+                    f"<td>{h['time']}</td><td class='{"done" if h.get("used") else "todo"}'>{"已用" if h.get("used") else "未用"}</td>"
+                    f"<td class='{"err" if h.get("revoked") else "done"}'>{"已吊销" if h.get("revoked") else "正常"}</td></tr>"
                     for h in data["hits"]
                 )
                 decode_html = f"""<div class="box"><p class="ok">一次性码 {code} 匹配到：</p>
-<table><tr><th>绑定码</th><th>QQ</th><th>内容</th><th>签发时间</th><th>状态</th><th>使用</th></tr>{rows}</table></div>"""
+<table><tr><th>绑定码</th><th>QQ</th><th>内容</th><th>签发时间</th><th>使用</th><th>吊销</th></tr>{rows}</table></div>"""
             else:
                 decode_html = f"<div class='box'><p class='err'>一次性码 {code} 无匹配。</p></div>"
         with LOCK:
@@ -742,7 +822,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # ---------- 插件 API ----------
 
     def _handle_api_redeem(self, qs):
-        """一次性码兑付：/hint /记忆库 /凭证 /彩蛋 统一走这里。"""
+        """一次性码兑付：/submit 统一走这里。码归属校验：只认本人名下生成的码。"""
         if qs.get("secret", [""])[0] != ADMIN_TOKEN:
             return self._json({"ok": False, "err": "bad secret"}, 403)
         player = self._player_from(qs)
@@ -758,8 +838,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._json({"ok": True, "status": "bad"})
             if entry.get("used"):
                 return self._json({"ok": True, "status": "used"})
-            if int(time.time()) - entry["gen"] > CODE_TTL:
-                return self._json({"ok": True, "status": "expired"})
+            if entry.get("revoked"):
+                return self._json({"ok": True, "status": "revoked"})
             now = int(time.time())
             kind, stage, level = entry["kind"], entry.get("stage"), entry.get("level")
             if kind == "h":
@@ -857,10 +937,35 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         "qq": p.get("qq"),
                         "label": code_label(e),
                         "time": time.strftime("%m-%d %H:%M", time.localtime(e["gen"])),
-                        "valid": (now - e["gen"]) <= CODE_TTL,
                         "used": bool(e.get("used")),
+                        "revoked": bool(e.get("revoked")),
                     })
         return self._json({"ok": True, "hits": hits})
+
+    def _handle_api_revoke(self, qs):
+        """群聊泄码时由插件调用：吊销该码；若为第 3 层提示，退回待审批（需重新申请）。"""
+        if qs.get("secret", [""])[0] != ADMIN_TOKEN:
+            return self._json({"ok": False, "err": "bad secret"}, 403)
+        code = qs.get("code", [""])[0].strip().lower()
+        if code.startswith("0x"):
+            code = code[2:]
+        now = int(time.time())
+        found = False
+        with LOCK:
+            for player, p in STATE["players"].items():
+                entry = (p.get("hintcodes") or {}).get(code)
+                if not entry:
+                    continue
+                entry["revoked"] = True
+                if entry["kind"] == "h" and entry.get("level") == 2:
+                    st = entry.get("stage")
+                    if st:
+                        p.setdefault("hint_req", {})[str(st)] = {"ts": now, "status": "pending"}
+                p["last"] = now
+                found = True
+                save_state()
+                break
+        return self._json({"ok": True, "found": found})
 
     def _handle_api_events(self, qs):
         """供插件轮询：返回 after 之后的全部事件（逐关通关/终局/彩蛋），按时间排序。"""
@@ -885,6 +990,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if p.get("egg_ts") and p["egg_ts"] > after:
                     events.append({"type": "egg", "player": player, "qq": qq, "name": name,
                                    "ts": p["egg_ts"]})
+                for st, r in (p.get("hint_req") or {}).items():
+                    if r.get("status") == "approved" and r.get("approved_ts", 0) > after:
+                        events.append({"type": "hint_approved", "player": player, "qq": qq, "name": name,
+                                       "stage": int(st), "ts": r["approved_ts"]})
         events.sort(key=lambda e: e["ts"])
         return self._json({"ok": True, "events": events})
 

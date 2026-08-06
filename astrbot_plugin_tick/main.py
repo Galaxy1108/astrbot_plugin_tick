@@ -1,14 +1,12 @@
 """ζ 计划（Project ZETA）—— AstrBot 剧情插件（汐月）
 
-一次性码兑付机制：每关页面按玩家签发专属提示码（每人每码唯一，10 分钟有效，用完即焚）。
-所有内容统一通过一个指令私聊兑换，码自带身份（3 层提示 / 记忆库 / 凭证 / 彩蛋）：
-    /submit 0x<码>   由网页 /api/redeem 按码兑付
-    /进度             查看通关进度
-群内（包括 @）发送 /submit 一律无效、不消耗码；群内只保留剧情与 /bind。
-玩家通关后，插件向指定群聊推送通关播报。
+提示码机制：网页上手动生成、无时间限制、用完即焚、只认本人。
+群聊中出现提示码 → 立即吊销（第3层退回重新申请）；审批通过 → 私聊通知玩家。
+私聊指令：/zeta /submit 0x码 /进度（群聊无效不消耗）
 """
 
 import asyncio
+import re
 import urllib.parse
 
 import aiohttp
@@ -20,6 +18,8 @@ from astrbot.api.message_components import Plain
 from astrbot.api.star import Star
 
 POLL_INTERVAL = 30  # 秒
+
+CODE_RE = re.compile(r"(?:0x)?[0-9a-f]{5}(?![0-9a-f])")
 
 
 class Main(Star):
@@ -63,10 +63,13 @@ class Main(Star):
         return await self.get_kv_data(f"tick_qq_{qq}", None)
 
     async def _call(self, event: AstrMessageEvent, path: str, params: dict):
-        """带上玩家身份调用网页 API；返回 (ret, err_msg)。"""
+        """带上玩家身份调用网页 API；返回 (ret, err_msg)。同时记录玩家私聊会话供通知使用。"""
         code = await self._bound_code(event)
         if not code:
             return None, "你还没绑定玩家身份。先去网页 /join 领取绑定码，再到群里 @我发送 /bind <绑定码>。"
+        if not event.is_private_chat():
+            return None, "这些事只能在私聊里说。"
+        await self.put_kv_data(f"tick_umo_{code}", event.unified_msg_origin)
         params["player"] = code
         ret = await self._api(path, params)
         if ret is None:
@@ -83,13 +86,17 @@ class Main(Star):
     @filter.command("zeta", alias={"tick"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
     async def zeta_help(self, event: AstrMessageEvent):
+        code = await self._bound_code(event)
+        if code:
+            await self.put_kv_data(f"tick_umo_{code}", event.unified_msg_origin)
         yield event.plain_result(
             "汐月：你想知道苏桁的事？先按顺序来：\n"
             "1. 在群里 @我，发送 /bind <绑定码>（绑定码去网页 /join 领取）；\n"
             "2. 从网页 /zeta 开始解谜；\n"
-            "3. 每关页面的「专属提示码」区有你的码，私聊我 /submit 0x<码> 兑换"
-            "（提示、记忆库、凭证、彩蛋都走这一个指令，每人每码只能用一次，10 分钟有效）；\n"
-            "4. /进度 查看自己的通关进度。\n"
+            "3. 每关页面的「专属提示码」区<b>手动点击生成</b>你的码，私聊我 /submit 0x<码> 兑换"
+            "（提示、记忆库、凭证、彩蛋都走这一个指令；码无时间限制、用完即焚、只认本人）；\n"
+            "4. 第 1 层等 5 分钟、第 2 层等 20 分钟解锁，第 3 层申请后由管理员审批；\n"
+            "5. /进度 查看自己的通关进度。\n"
             "苏桁说，秘密只能一对一地说，说了就没了。"
         )
 
@@ -111,13 +118,13 @@ class Main(Star):
             yield event.plain_result(f"不行哦，你还没通关第 {ret['need']} 关，这个码还不能用。")
         elif status == "notyet":
             mins = max(1, (ret.get("wait", 0) + 59) // 60)
-            yield event.plain_result(f"这一层提示还没解锁，还要等约 {mins} 分钟。回到关卡页刷新看看进度。")
-        elif status == "expired":
-            yield event.plain_result("这个码过期了。回到网页上对应关卡，刷新页面重新领取。")
+            yield event.plain_result(f"这一层提示还没解锁，还要等约 {mins} 分钟。回到关卡页看看进度。")
         elif status == "used":
             yield event.plain_result("这个码已经用过了（一次性），它不会再出现了。")
+        elif status == "revoked":
+            yield event.plain_result("这个码已经被吊销了（是不是发到群里了？）。回到网页重新生成；第三层的需要重新申请。")
         else:
-            yield event.plain_result("这不是有效的码。检查一下有没有抄错，或者回网页重新领取。")
+            yield event.plain_result("这不是有效的码。它只属于你，别人的码用不了——回网页重新生成一个吧。")
 
     @filter.command("进度", alias={"progress"})
     @filter.event_message_type(EventMessageType.PRIVATE_MESSAGE)
@@ -153,7 +160,7 @@ class Main(Star):
         else:
             yield event.plain_result("绑定失败：这个绑定码不存在。先去网页 /join 领取绑定码，再回来绑定。")
 
-    # ---------- 群内拦截：敏感指令在群里一律无效（不消耗任何码） ----------
+    # ---------- 群内拦截：敏感指令/泄码在群里一律无效（不消耗任何码） ----------
 
     @filter.regex(r"^(submit|提交|兑换|进度|zeta|tick)\b")
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
@@ -163,6 +170,21 @@ class Main(Star):
             "这些指令只能在私聊里使用，在群里说了是无效的（也不会消耗你的码）。"
             "想聊剧情的话，随时可以 @我。"
         )
+
+    @filter.regex(r"(?:0x)?[0-9a-f]{5}(?![0-9a-f])")
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    async def group_leak(self, event: AstrMessageEvent):
+        """群里出现提示码 → 立即吊销（第 3 层退回重新申请）。"""
+        self._remember_group(event)
+        m = CODE_RE.search(event.get_message_str())
+        if not m:
+            return
+        code = m.group(0).lower()
+        if code.startswith("0x"):
+            code = code[2:]
+        ret = await self._api("/api/revoke", {"code": code})
+        if ret and ret.get("found"):
+            yield event.plain_result("……这个码已经作废了。发到群里，它就死了。回网页重新生成吧（第三层需要重新申请）。")
 
     # ---------- 群内剧情对话（不含任何答案/提示） ----------
 
@@ -226,6 +248,16 @@ class Main(Star):
                 )
             elif etype == "egg":
                 text = f"彩蛋快报：{name}（{qq}）找到了隐藏结局！"
+            elif etype == "hint_approved":
+                pumo = await self.get_kv_data(f"tick_umo_{e['player']}", None)
+                if not pumo:
+                    continue
+                text = f"玩家{name}，您的第 {e['stage']} 关第三层提示码已生成，请及时到网页查看并私聊 /submit 兑换。"
+                try:
+                    await self.context.send_message(pumo, MessageChain(chain=[Plain(text)]))
+                except Exception as ex:
+                    logger.error(f"[tick] 审批通知发送失败: {ex}")
+                continue
             else:
                 continue
             try:
