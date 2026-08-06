@@ -25,7 +25,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
-POLL_INTERVAL = 30  # 秒
+POLL_INTERVAL = 5  # 秒（审批/播报近实时）
 
 CODE_RE = re.compile(r"(?:0x)?[0-9a-f]{5}(?![0-9a-f])")
 
@@ -373,7 +373,10 @@ class Main(Star):
                 pumo = await self.get_kv_data(f"tick_umo_{e['player']}", None)
                 if not pumo:
                     continue
-                text = f"玩家{name}，您第 {e['stage']} 关的第三层提示申请被驳回了。可以回网页重新申请。"
+                reason = (e.get("reason") or "").strip()
+                text = (f"玩家{name}，您第 {e['stage']} 关的第三层提示申请被驳回了。"
+                        + (f"理由：{reason}。" if reason else "")
+                        + "可以回网页重新申请。")
                 try:
                     await self.context.send_message(pumo, MessageChain(chain=[Plain(text)]))
                 except Exception as ex:

@@ -904,8 +904,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             "ts": int(time.time()), "status": "approved", "approved_ts": int(time.time())}
                         flash = f"<div class='box'><p class='ok'>已批准 {target} 的第 {stage} 关第三层提示。</p></div>"
                     else:
+                        reason = qs.get("reason", [""])[0].strip()[:100]
                         p.setdefault("hint_req", {})[str(stage)] = {
-                            "ts": int(time.time()), "status": "rejected", "rejected_ts": int(time.time())}
+                            "ts": int(time.time()), "status": "rejected",
+                            "rejected_ts": int(time.time()), "reason": reason}
                         flash = f"<div class='box'><p class='err'>已驳回 {target} 的第 {stage} 关申请。</p></div>"
                     save_state()
         decode_html = ""
@@ -997,7 +999,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 f"<tr><td>{player}</td><td>{p.get('qq') or '—'}</td><td>{p.get('name') or '—'}</td>"
                 f"<td>{st}</td><td>{time.strftime('%m-%d %H:%M', time.localtime(r['ts']))}</td>"
                 f"<td><a href='/admin?pass={ADMIN_TOKEN}&approve={player}&stage={st}' style='color:#6ee7a0'>批准</a> "
-                f"<a href='/admin?pass={ADMIN_TOKEN}&reject={player}&stage={st}' style='color:#ff6b6b'>驳回</a></td></tr>"
+                f"<a href='#' style='color:#ff6b6b' onclick=\"var r=prompt('驳回理由：'); if(r!==null) location.href='/admin?pass={ADMIN_TOKEN}&reject={player}&stage={st}&reason='+encodeURIComponent(r); return false;\">驳回</a></td></tr>"
                 for player, p, st, r in pending
             )
             pending_html = f"""<div class="box"><p class="frag">第三层提示审批（{len(pending)} 个待处理）</p>
@@ -1237,7 +1239,8 @@ onclick="return confirm('确认清空全部玩家数据？此操作不可撤销�
                                        "stage": int(st), "ts": r["approved_ts"]})
                     if r.get("status") == "rejected" and r.get("rejected_ts", 0) > after:
                         events.append({"type": "hint_rejected", "player": player, "qq": qq, "name": name,
-                                       "stage": int(st), "ts": r["rejected_ts"]})
+                                       "stage": int(st), "ts": r["rejected_ts"],
+                                       "reason": r.get("reason", "")})
         events.sort(key=lambda e: e["ts"])
         return self._json({"ok": True, "events": events})
 
