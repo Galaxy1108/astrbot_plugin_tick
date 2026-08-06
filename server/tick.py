@@ -497,7 +497,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if req and req.get("status") == "approved":
                         lines.append(f"<p>{HINT_LABELS[lv]}：{code_line(p, 'h', stage, lv, gen_url)}（已通过审批）</p>")
                     elif req and req.get("status") == "pending":
-                        lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ffd479'>已提交申请，等待管理员审批</span></p>")
+                        revoked_note = ""
+                        for _c, _e in (p.get("hintcodes") or {}).items():
+                            if (_e["kind"], _e.get("stage"), _e.get("level")) == ("h", stage, 2) and _e.get("revoked"):
+                                revoked_note = "<span style='color:#ff6b6b'>（原码已吊销——发到群里了？）</span>"
+                                break
+                        lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ffd479'>已提交申请，等待管理员审批</span>{revoked_note}</p>")
                     elif req and req.get("status") == "rejected":
                         lines.append(f"<p>{HINT_LABELS[lv]}：<span style='color:#ff6b6b'>申请被驳回</span> <a href='/request?stage={stage}'>重新申请</a></p>")
                     else:
