@@ -389,7 +389,7 @@ def code_label(entry):
 
 # ---------------- 玩家进度存储 ----------------
 
-LOCK = threading.Lock()
+LOCK = threading.RLock()
 STATE = {"players": {}}
 
 
@@ -576,7 +576,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        for k, v in (extra_headers or {}).items():
+        if isinstance(extra_headers, dict):
+            extra_headers = list(extra_headers.items())
+        for k, v in (extra_headers or []):
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
