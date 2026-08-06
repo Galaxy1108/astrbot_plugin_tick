@@ -1068,7 +1068,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with LOCK:
             p = STATE["players"][player]
             p["egg"] = True
-            p["egg_ts"] = now_ms()
+            if not p.get("egg_ts"):
+                p["egg_ts"] = now_ms()  # 仅首次解锁记录，重复访问不产生新事件
             p["last"] = int(time.time())
             save_state()
         body = f"""<div class="box"><p class="ok">✅ 你找到了那句真心话。</p>
