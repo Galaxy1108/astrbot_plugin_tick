@@ -876,6 +876,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 <li>然后从 <a href="/stage1"><b>第 1 关</b></a> 开始。</li>
 </ol>
 <p>苏桁的 AI「汐月」还在群里，每天照常聊天——她是这场游戏的接应人。</p>
+<div class="box"><p class="frag">提示码怎么用</p>
+<ol>
+<li>每一关页面都有「专属提示码」区：<b>第 1 层</b> 等 5 分钟、<b>第 2 层</b> 等 20 分钟可点「生成」，<b>第 3 层</b> 需先申请、管理员审批；</li>
+<li>生成后私聊汐月发送 <code>/submit 0x&lt;码&gt;</code> 兑换（每人每码唯一）；</li>
+<li>码是<b>一次性</b>的，用完即焚；<b>千万别发群里</b>——发群会被自动吊销；</li>
+<li>第 8 关没有提示区——最后的路，自己走。</li>
+</ol>
 <p style="color:#6b7683">开始后<b>私聊汐月</b>：她会告诉你更多，卡关时也能用提示码换提示。</p>
 </div>"""
         return page("ζ 计划", body)
